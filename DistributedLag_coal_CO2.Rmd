@@ -1,0 +1,119 @@
+Hourly coal->CO2 data Arpita Biswas April 05, 2023
+
+```{r}
+#install.packages("lubridate")
+library(data.table)
+library(lubridate)
+```
+
+```{r}
+#devtools::install_github("danielmork/dlmtree", ref="development")
+library(ggplot2)
+library(ggpubr)
+library(dlmtree)
+library(splines)
+library(readxl)
+```
+
+```{r}
+setwd("/n/dominici_lab/lab/fossil_fuel_energy/data/")
+data <- read_xlsx("energy/Region_SW.xlsx", guess_max = 50000)
+setDT(data)
+data <- data[!is.na(`NG: COL`)]
+data[, date2 := as_date(`Local date`)]
+data[, dow := wday(date2)]
+data[, week := week(date2)]
+data[, month := month(date2)]
+data[, year := year(date2)]
+data[, demand := `Sum (NG)` + `Sum (Trade)`]
+data[, index := 1:.N]
+
+# Make column names safe for use in formulas
+setnames(data, make.names(names(data)))
+print(colnames(data))
+
+
+# Create lagged data
+lags <- 10
+lag_dat <- as.matrix(data[, shift(NG..COL, 0:10, type = "lag")])
+lead_dat <- as.matrix(data[, shift(NG..COL, 10:1, type = "lead")])
+lag_dat <- cbind(lead_dat, lag_dat)
+
+# Complete data rows
+complete <- which(complete.cases(lag_dat) & 
+                          complete.cases(data[, .(CO2.Emissions..COL, demand)]))
+
+# Distributed lag models
+# control for demand
+
+# Linear lagged model
+lin_mod <- tdlnm(CO2.Emissions..COL ~ ns(index, df = 24) * ns(Hour, df = 4),           
+                  data[complete],
+                  exposure.data = lag_dat[complete,],
+                  exposure.splits = 0)
+```
+
+```{r}
+s_lin_mod <- summary(lin_mod)
+plot(s_lin_mod, start.time = -lags,
+     xlab = "Hours lead (-) / lag (+)", 
+     ylab = "Change in CO2 generation per unit increase in coal",
+     main = "Hourly data")
+```
+
+```{r}
+# Nonlinear lagged model
+dlnm_mod <- tdlnm(I(-1*CO2.Emissions..COL) ~ ns(index, df = 24) * ns(Hour, df = 4),           
+                  data[complete],
+                  exposure.data = lag_dat[complete,],
+                  exposure.splits = seq(200, 2000, length.out = 10),
+                  #n.burn = 500, n.iter = 1000,
+                  monotone = T,
+                  time.split.prob = rep(c(1, 10, 1), c(6, 7, 6)))
+```
+
+```{r}
+s_dlnm_mod <- summary(dlnm_mod, cenval = mean(data$NG..COL), conf.level = .9)
+plot((-lags):lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
+     xlab = "Hours lead (-) / lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
+```
+
+```{r}
+plot(s_dlnm_mod, start.time = -lags,
+     xlab = "Lag hour",
+     ylab = "Coal generation",
+     flab = "Decreased CO2",
+     main = "SW Region")
+```
+
+```{r}
+{p1 <- plot(s_dlnm_mod, "slice", time = -1, start.time = -lags,
+            xlab = "Solar generation", ylab = "Decrease in CO2 generation",
+            main = "1 hours lead")
+        p2 <- plot(s_dlnm_mod, "slice", time = 0, start.time = -lags,
+                   xlab = "", ylab = "",
+                   main = "Same time")
+        p3 <- plot(s_dlnm_mod, "slice", time = 1, start.time = -lags,
+                   xlab = "", ylab = "",
+                   main = "1 hour lag")
+        p4 <- plot(s_dlnm_mod, "slice", time = 2, start.time = -lags,
+                   xlab = "", ylab = "",
+                   main = "2 hours lag")
+        ggarrange(p1, p2, p3, p4)}
+```
+
+```{r}
+{p1 <- plot(s_dlnm_mod, "slice", val = 2000, start.time = -lags,
+            xlab = "Hours lead (-) / lag (+)", ylab = "Decrease in CO2 generation",
+            main = "Solar = 2000")
+        p2 <- plot(s_dlnm_mod, "slice", val = 1500, start.time = -lags,
+                   xlab = "", ylab = "",
+                   main = "Solar = 1500")
+        p3 <- plot(s_dlnm_mod, "slice", val = 1000, start.time = -lags,
+                   xlab = "", ylab = "",
+                   main = "Solar = 1000")
+        p4 <- plot(s_dlnm_mod, "slice", val = 500, start.time = -lags,
+                   xlab = "", ylab = "",
+                   main = "Solar = 500")
+        ggarrange(p1, p2, p3, p4)}
+```
