@@ -24,12 +24,12 @@ library(readxl)
 
 ```{r}
 setwd("/n/dominici_lab/lab/fossil_fuel_energy/data/")
-countries <- c('CAL', 'SW')
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'NY', 'SE', 'SW', 'TEN', 'TEX')
 data_list <- list()
 lag_data_list <- list()
 lead_data_list <- list()
 complete_list <- list()
-for (i in range(1:length(countries))){
+for (i in (1:length(countries))){
 
   data <- read_xlsx(paste("energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 50000)
   setDT(data)
@@ -49,8 +49,8 @@ for (i in range(1:length(countries))){
   
   
   # Create lagged data
-  lags <- 10
-  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:10, type = "lag")])
+  lags <- 12
+  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:12, type = "lag")])
   #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
   #lag_dat <- cbind(lead_dat, lag_dat)
   # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
@@ -71,20 +71,22 @@ for (i in range(1:length(countries))){
 # Individual Nonlinear lagged model
 
 dlnm_mod_list<-list()
-for (i in range(1:length(countries))){
+for (i in (1:length(countries))){
   data <- data_list[[i]]
   complete <- complete_list[[i]]
   lag_dat <- lag_data_list[[i]]
   set.seed(6757+i)
-  dlnm_mod_list[[i]] <- combine.models(lapply(1:10, function(j) {
+  dlnm_mod_list[[i]] <- combine.models(lapply(1:5, function(j) {
                                 tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) * ns(Hour, df = 4) + demand,       
                                               data[complete],
                                               exposure.data = lag_dat[complete,],
-                                              exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10), #5%and 95% percentile
+                                              exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 12), #5%and 95% percentile
                                               #n.burn = 500, n.iter = 1000,
                                               monotone = T,
-                                              time.split.prob = rep(c(10, 1), c(4, 6)))
+                                              time.split.prob = rep(c(10, 3), c(5, 7)))
   }))
+  dm<-dlnm_mod_list[[i]]
+  save(dm,file=paste("dlnm_mod_",countries[i],".Rda",sep=""))
   save(dlnm_mod_list,file="dlnm_mod_list.Rda")
 }
 
@@ -100,20 +102,21 @@ load("dlnm_mod_list.Rda")
 
 ```{r}
 
-for (i in range(1:length(countries))){
+for (i in (1:length(countries))){
+  print(paste("country: ", countries[i], sep=""))
   dlnm_mod <- dlnm_mod_list[[i]]
   
   s_dlnm_mod <- summary(dlnm_mod, cenval = 0, conf.level = .9)
   jpeg(paste("lineplot_",countries[i],".jpg", sep=""))
   plot(0:lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
        main = paste(countries[i], " Region", sep=""),
-       xlab = "Hours lead (-) / lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
+       xlab = "lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
   dev.off()
 }
 ```
 
 ```{r}
-for (i in range(1:length(countries))){
+for (i in (1:length(countries))){
   dlnm_mod <- dlnm_mod_list[[i]]
   
   s_dlnm_mod <- summary(dlnm_mod, cenval = 0, conf.level = .9)
@@ -129,7 +132,7 @@ for (i in range(1:length(countries))){
 
 ```{r}
 y_upper_list<- c(1000,200)
-for (i in range(1:length(countries))){
+for (i in (1:length(countries))){
   dlnm_mod <- dlnm_mod_list[[i]]
   
   s_dlnm_mod <- summary(dlnm_mod, cenval = 0, conf.level = .9)
@@ -157,10 +160,10 @@ countries <- c("CAL", "SW")
 modified_data_list<- list()
 
 #For each region, adjust the trade exchange value
-for (i in range(1:length(countries))){
+for (i in (1:length(countries))){
   d<- data_list[[i]]
   d$D_new<- d$D
-  for (j in range(1:length(countries))){
+  for (j in (1:length(countries))){
     d<- d %>% mutate_at(c(paste(countries[j])), ~replace_na(.,0))
     d$D_new <- d$D_new + d[[countries[j]]]
   }
@@ -173,7 +176,7 @@ for (i in range(1:length(countries))){
 #Merge using the UTC time and not Local Time
 combo <- modified_data_list[[1]]
 combo <- combo[, c("Local.date", "Hour", "D_new", "NG..SUN", "CO2.Emissions.Generated")]
-for (i in range(2:length(countries))){
+for (i in (2:length(countries))){
   combo<-merge(combo, modified_data_list[i], by=c("UTC.time"))
   combo$Local.date <- combo$Local.date.x
   combo$Hour <- combo$Hour.x
