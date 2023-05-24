@@ -71,7 +71,7 @@ for (i in (1:length(countries))){
 # Individual Nonlinear lagged model
 
 load("dlnm_mod_list.Rda")
-for (i in (7:length(countries))){
+for (i in (10:length(countries))){
   data <- data_list[[i]]
   complete <- complete_list[[i]]
   lag_dat <- lag_data_list[[i]]
@@ -80,7 +80,7 @@ for (i in (7:length(countries))){
                                 tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) * ns(Hour, df = 4) + demand,       
                                               data[complete],
                                               exposure.data = lag_dat[complete,],
-                                              exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 12), #5%and 95% percentile
+                                              exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10), #5%and 95% percentile
                                               #n.burn = 500, n.iter = 1000,
                                               monotone = T,
                                               time.split.prob = rep(c(10, 3), c(5, 7)))
@@ -131,7 +131,8 @@ for (i in (1:length(countries))){
 ```
 
 ```{r}
-y_upper_list<- c(12000, 6000, 500, 20000, 40000, 1500)
+y_upper_list<- c(12000, 6000, 500, 20000, 40000, 1500, 75, 12000)
+y_lower_list<- c(-200, -200, -200, -200, -200, -200, -75, -200)
 for (i in (1:length(countries))){
   dlnm_mod <- dlnm_mod_list[[i]]
   
@@ -139,136 +140,114 @@ for (i in (1:length(countries))){
   jpeg(paste("continuous_",countries[i],".jpg", sep="")) 
   p2 <- plot(s_dlnm_mod, "slice", time = 0, start.time = 0,
              xlab = "Solar generation", ylab = "Decrease in CO2 generation",
-             main = "Same time") + scale_y_continuous(limits=c(-200,y_upper_list[i]))
+             main = "Same time") + scale_y_continuous(limits=c(y_lower_list[i],y_upper_list[i]))
   p3 <- plot(s_dlnm_mod, "slice", time = 1, start.time = 0,
              xlab = "", ylab = "", 
-             main = "1 hour lag") + scale_y_continuous(limits=c(-200,y_upper_list[i]))
+             main = "1 hour lag") + scale_y_continuous(limits=c(y_lower_list[i],y_upper_list[i]))
   p4 <- plot(s_dlnm_mod, "slice", time = 3, start.time = 0,
              xlab = "", ylab = "", 
-             main = "3 hours lag") + scale_y_continuous(limits=c(-200,y_upper_list[i]))
+             main = "3 hours lag") + scale_y_continuous(limits=c(y_lower_list[i],y_upper_list[i]))
   p5 <- plot(s_dlnm_mod, "slice", time = 5, start.time = 0,
              xlab = "", ylab = "", 
-             main = "5 hours lag") + scale_y_continuous(limits=c(-200,y_upper_list[i]))
+             main = "5 hours lag") + scale_y_continuous(limits=c(y_lower_list[i],y_upper_list[i]))
   p6 <- plot(s_dlnm_mod, "slice", time = 8, start.time = 0,
              xlab = "", ylab = "", 
-             main = "8 hours lag") + scale_y_continuous(limits=c(-200,y_upper_list[i]))
+             main = "8 hours lag") + scale_y_continuous(limits=c(y_lower_list[i],y_upper_list[i]))
   p7 <- plot(s_dlnm_mod, "slice", time = 12, start.time = 0,
              xlab = "", ylab = "", 
-             main = "12 hours lag") + scale_y_continuous(limits=c(-200,y_upper_list[i]))
+             main = "12 hours lag") + scale_y_continuous(limits=c(y_lower_list[i],y_upper_list[i]))
   ggarrange(p2, p3, p4,p5,p6,p7)
   dev.off()
 }
 ```
 
-```{r}
-#Group of countries
-countries <- c("CAL", "SW")
-modified_data_list<- list()
-
-#For each region, adjust the trade exchange value
-for (i in (1:length(countries))){
-  d<- data_list[[i]]
-  d$D_new<- d$D
-  for (j in (1:length(countries))){
-    d<- d %>% mutate_at(c(paste(countries[j])), ~replace_na(.,0))
-    d$D_new <- d$D_new + d[[countries[j]]]
-  }
-  modified_data_list[[i]]<-d
-}
-```
 
 ```{r}
-#Create one merged file
-#Merge using the UTC time and not Local Time
-combo <- modified_data_list[[1]]
-combo <- combo[, c("Local.date", "Hour", "D_new", "NG..SUN", "CO2.Emissions.Generated")]
-for (i in (2:length(countries))){
-  combo<-merge(combo, modified_data_list[i], by=c("UTC.time"))
-  combo$Local.date <- combo$Local.date.x
-  combo$Hour <- combo$Hour.x
-  combo$D<- combo$D.y
-  combo$NG..SUN<- combo$NG..SUN.x
-  combo$CO2.Emissions.Generated <- combo$CO2.Emissions.Generated.y
-  combo <- combo[, c("Local.date", "Hour", "D", "NG..SUN", "CO2.Emissions.Generated")]
-}
-```
-
-```{r}
-data <- combo
-setDT(data)
-data <- data[!is.na(`NG..SUN`)]
-data[, date2 := as_date(`Local.date`)]
-data[, dow := wday(date2)]
-data[, week := week(date2)]
-data[, month := month(date2)]
-data[, year := year(date2)]
-data[, demand := `D`]
-data[, index := 1:.N]
-
-# Make column names safe for use in formulas
-setnames(data, make.names(names(data)))
-print(colnames(data))
-
-
-# Create lagged data
-lags <- 10
-lag_dat <- as.matrix(data[, shift(NG..SUN, 0:10, type = "lag")])
-#lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
-#lag_dat <- cbind(lead_dat, lag_dat)
-complete<- which(complete.cases(lag_dat) & 
+#Year-wise analysis
+year_wise_analysis <- function(country, year){
+  setwd("/n/dominici_lab/lab/fossil_fuel_energy/data/")
+  data <- read_xlsx(paste("energy/Region_", country, ".xlsx", sep=""), guess_max = 50000)
+  setDT(data)
+  data <- data[!is.na(`NG: SUN`)]
+  data <- data[!which('NG..SUN'<0)]
+  data[, date2 := as_date(`Local date`)]
+  data[, dow := wday(date2)]
+  data[, week := week(date2)]
+  data[, month := month(date2)]
+  data[, year := year(date2)]
+  data[, demand := `D`]
+  data[, index := 1:.N]
+  
+  #Extract rows from a particular year
+  data <- data[data$date >= paste(year,"-01-01", sep="") & data$date <= paste(year,"-12-31", sep=""), ]
+  
+  # Make column names safe for use in formulas
+  setnames(data, make.names(names(data)))
+  #print(colnames(data))
+  
+  
+  # Create lagged data
+  lags <- 12
+  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:12, type = "lag")])
+  #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
+  #lag_dat <- cbind(lead_dat, lag_dat)
+  # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
+  # Complete data rows
+  
+  complete <- which(complete.cases(lag_dat) & 
                             complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
-
-dlnm_mod <- tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) * ns(Hour, df = 4) + demand,       
-            data[complete],
-            exposure.data = lag_dat[complete,],
-            exposure.splits = seq(200, 2000, length.out = 10),
-            #n.burn = 500, n.iter = 1000,
-            monotone = T,
-            time.split.prob = rep(c(1, 10, 1), c(6, 7, 6)))
-
-save(dlnm_mod,file=paste("dlnm_mod_",paste(countries, collapse="_"),".Rda", sep=""))
-
-```
-```{r}
-save(dlnm_mod,file=paste("dlnm_mod_",paste(countries, collapse="_"),".Rda", sep=""))
+  dlnm_mod_year_wise <- combine.models(lapply(1:2, function(j) {
+                                    tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) * ns(Hour, df = 4) + demand,       
+                                                  data[complete],
+                                                  exposure.data = lag_dat[complete,],
+                                                  exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10), #5%and 95% percentile
+                                                  #n.burn = 500, n.iter = 1000,
+                                                  monotone = T,
+                                                  time.split.prob = rep(c(10, 3), c(5, 7)))
+      }))
+    setwd("~/repo/green-energy-optimization")
+    save(dlnm_mod_year_wise,file=paste("dlnm_mod_",paste(country, year, sep="_"),".Rda", sep=""))
+}
 ```
 
 ```{r}
-load(paste("dlnm_mod_",paste(countries, collapse="_"),".Rda", sep=""))
-s_dlnm_mod <- summary(dlnm_mod, cenval = 0, conf.level = .9)
+country_list = c("CAL")
+years = c("2018", "2019", "2020", "2021", "2022", "2023")
+for (i in 1:length(country_list)){
+  for (j in 1:length(years)){
+    year_wise_analysis(country_list[i], years[j])
+  }
+}
+```
 
-#lineplot 
-jpeg(paste("lineplot_",paste(countries, collapse="_"),".jpg", sep=""))
-plot((-lags):lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
-     main = paste(countries, collapse="_"),
-     xlab = "Hours lead (-) / lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
-dev.off()
-
-#heatmap
-jpeg(paste("heatmap_",paste(countries, collapse="_"),".jpg", sep=""))
-plot(s_dlnm_mod, start.time = -lags,
-   xlab = "Lag hour",
-   ylab = "Solar generation",
-   flab = "Decreased CO2",
-   main = paste(countries, collapse="_"))
-dev.off()
-
-#lagged plots
-jpeg(paste("continuous_",paste(countries, collapse="_"),".jpg", sep="")) 
-p2 <- plot(s_dlnm_mod, "slice", time = 0, start.time = -lags,
-           xlab = "Solar generation", ylab = "Decrease in CO2 generation",
-           main = "Same time") + scale_y_continuous(limits=c(-200,5000))
-p3 <- plot(s_dlnm_mod, "slice", time = 1, start.time = -lags,
-           xlab = "", ylab = "", 
-           main = "1 hour lag") + scale_y_continuous(limits=c(-200,5000))
-p4 <- plot(s_dlnm_mod, "slice", time = 2, start.time = -lags,
-           xlab = "", ylab = "", 
-           main = "2 hours lag") + scale_y_continuous(limits=c(-200,5000))
-p5 <- plot(s_dlnm_mod, "slice", time = 3, start.time = -lags,
-           xlab = "", ylab = "", 
-           main = "3 hours lag") + scale_y_continuous(limits=c(-200,5000))
-ggarrange(p2, p3, p4,p5)
-dev.off()
+```{r}
+country_list = c("CAL")
+years = c("2018", "2019", "2020", "2021", "2022", "2023")
+for (i in 1:length(country_list)){
+  for (j in 1:length(years)){
+    country = country_list[i]
+    year =years[j] 
+    
+    dlnm_mod_year=load(paste("dlnm_mod_",paste(country, year, sep="_"),".Rda", sep=""))
+    s_dlnm_mod <- summary(dlnm_mod_year, cenval = 0, conf.level = .9)
+    
+    #lineplot 
+    jpeg(paste("lineplot_year_wise_",paste(country, year, sep="_"),".jpg", sep=""))
+    plot(0:lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
+         main = paste(base, other, sep="_"),
+         xlab = "lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
+    dev.off()
+    
+    #heatmap
+    jpeg(paste("heatmap_year_wise_",paste(country, year, sep="_"),".jpg", sep=""))
+    plot(s_dlnm_mod, start.time = 0,
+       xlab = "Lag hour",
+       ylab = "Solar generation",
+       flab = "Decreased CO2",
+       main = paste(country, year, sep="_"))
+    dev.off()
+  }
+}
 ```
 
 
@@ -303,16 +282,70 @@ run_analysis <- function(combo, base, other){
                                     tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) * ns(Hour, df = 4) + demand,       
                                                   data[complete],
                                                   exposure.data = lag_dat[complete,],
-                                                  exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 12), #5%and 95% percentile
+                                                  exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10), #5%and 95% percentile
                                                   #n.burn = 500, n.iter = 1000,
                                                   monotone = T,
                                                   time.split.prob = rep(c(10, 3), c(5, 7)))
       }))
     
-    save(dlnm_mod_directed,file=paste("dlnm_mod_directed_",paste(base, other, collapse="_"),".Rda", sep=""))
+    save(dlnm_mod_directed,file=paste("dlnm_mod_directed_",paste(base, other, sep="_"),".Rda", sep=""))
 
 }
 ```
+
+
+```{r}
+generate_plots<- function(base, other, k){
+  file_name = paste("dlnm_mod_directed_", paste(base, other, sep="_"),".Rda", sep="")
+  if(!file.exists(file_name)){
+    return (NULL)
+  }
+    load(file_name)
+    s_dlnm_mod <- summary(dlnm_mod_directed, cenval = 0, conf.level = .9)
+    
+    #lineplot 
+    jpeg(paste("lineplot_directed_",paste(base, other, sep="_"),".jpg", sep=""))
+    plot(0:lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
+         main = paste(base, other, sep="_"),
+         xlab = "lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
+    dev.off()
+    
+    #heatmap
+    jpeg(paste("heatmap_directed_",paste(base, other, sep="_"),".jpg", sep=""))
+    plot(s_dlnm_mod, start.time = 0,
+       xlab = "Lag hour",
+       ylab = "Solar generation",
+       flab = "Decreased CO2",
+       main = paste(base, other, sep="_"))
+    dev.off()
+    
+    #lagged plots
+    jpeg(paste("continuous_directed_",paste(base, other, sep="_"),".jpg", sep=""))
+    p2 <- plot(s_dlnm_mod, "slice", time = 0, start.time = 0,
+               xlab = "Solar generation", ylab = "Decrease in CO2 generation",
+               main = "Same time") + scale_y_continuous(limits=c(y_lower_list[k],y_upper_list[k]))
+    p3 <- plot(s_dlnm_mod, "slice", time = 1, start.time = 0,
+               xlab = "", ylab = "", 
+               main = "1 hour lag") + scale_y_continuous(limits=c(y_lower_list[k],y_upper_list[k]))
+    p4 <- plot(s_dlnm_mod, "slice", time = 3, start.time = 0,
+               xlab = "", ylab = "", 
+               main = "3 hours lag") + scale_y_continuous(limits=c(y_lower_list[k],y_upper_list[k]))
+    p5 <- plot(s_dlnm_mod, "slice", time = 5, start.time = 0,
+               xlab = "", ylab = "", 
+               main = "5 hours lag") + scale_y_continuous(limits=c(y_lower_list[k],y_upper_list[k]))
+    p6 <- plot(s_dlnm_mod, "slice", time = 8, start.time = 0,
+               xlab = "", ylab = "", 
+               main = "8 hours lag") + scale_y_continuous(limits=c(y_lower_list[k],y_upper_list[k]))
+    p7 <- plot(s_dlnm_mod, "slice", time = 12, start.time = 0,
+               xlab = "", ylab = "", 
+               main = "12 hours lag") + scale_y_continuous(limits=c(y_lower_list[k],y_upper_list[k]))
+    ggarrange(p2, p3, p4,p5,p6,p7)
+    dev.off()
+}
+  #CAL_CAR = [-200, 8000]
+
+```
+
 
 ```{r}
 #One country's CO2 reduction based on the "base" country
@@ -350,44 +383,19 @@ for (i in (1:length(countries))){
 #d$D_new <- d$D_new + d[[other_country]]
 ```
 
-
 ```{r}
-generate_plots<- function(base, other){
-  load(paste("dlnm_mod_directed_","dlnm_mod_directed_",paste(base, other, collapse="_"),".Rda", sep=""))
-    s_dlnm_mod <- summary(dlnm_mod_directed, cenval = 0, conf.level = .9)
-    
-    #lineplot 
-    jpeg(paste("lineplot_directed_","dlnm_mod_directed_",paste(base, other, collapse="_"),".jpg", sep=""))
-    plot(0:lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
-         main = paste(countries, collapse="_"),
-         xlab = "lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
-    dev.off()
-    
-    #heatmap
-    jpeg(paste("heatmap_directed_","dlnm_mod_directed_",paste(base, other, collapse="_"),".jpg", sep=""))
-    plot(s_dlnm_mod, start.time = 0,
-       xlab = "Lag hour",
-       ylab = "Solar generation",
-       flab = "Decreased CO2",
-       main = paste(countries, collapse="_"))
-    dev.off()
-    
-    #lagged plots
-    jpeg(paste("continuous_directed_","dlnm_mod_directed_",paste(base, other, collapse="_"),".jpg", sep=""))
-    p2 <- plot(s_dlnm_mod, "slice", time = 0, start.time = 0,
-               xlab = "Solar generation", ylab = "Decrease in CO2 generation",
-               main = "Same time") + scale_y_continuous(limits=c(-200,5000))
-    p3 <- plot(s_dlnm_mod, "slice", time = 1, start.time = 0,
-               xlab = "", ylab = "", 
-               main = "1 hour lag") + scale_y_continuous(limits=c(-200,5000))
-    p4 <- plot(s_dlnm_mod, "slice", time = 2, start.time = 0,
-               xlab = "", ylab = "", 
-               main = "2 hours lag") + scale_y_continuous(limits=c(-200,5000))
-    p5 <- plot(s_dlnm_mod, "slice", time = 3, start.time = 0,
-               xlab = "", ylab = "", 
-               main = "3 hours lag") + scale_y_continuous(limits=c(-200,5000))
-    ggarrange(p2, p3, p4,p5)
-    dev.off()
+y_upper_list = c(1000, 20000)
+y_lower_list = c(-200, -200)
+k=1
+for (i in (1:length(countries))){
+  for(j in (1:length(countries))){
+    if(i!=j){
+      base <- countries[i]
+      other <- countries[j]
+      print(paste(base, other, sep="_"))
+      generate_plots(base, other, k)
+      
+    }
+  }
 }
-
 ```
