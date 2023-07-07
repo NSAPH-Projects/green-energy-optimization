@@ -15,10 +15,52 @@ library(lubridate)
 library(dplyr)
 library(tidyr)
 library(readxl)
+library(sf)
+library(ggplot2)
+library(scico)
+```
+
+```{r}
+plot_data <- readRDS("../plot_data/eia_region_polygons.rds")
+jpeg(paste("US-Regions.jpg", sep=""))
+ggplot(plot_data, aes(fill=region),color ="black",size=0.5,alpha=1) + 
+  geom_sf() 
+dev.off()
 ```
 
 ```{r}
 countries <- c('CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'NY', 'SE', 'SW', 'TEN', 'TEX', "CAL")
+
+details<- function(start_date, end_date){
+  nrows<-list()
+  avg <- list()
+  maxs<-list()
+  mins<-list()
+  for (i in 1:length(countries)){
+    country = countries[i]
+    print(country)
+    #Read file and extract data
+    data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
+    #print("finish reading")
+    setDT(data)
+    data <- data[!is.na(`NG: SUN`)]
+    data <- data[!which(`NG: SUN`<0)]
+    data <- data[!which('CO2.Emissions.Generated'>=0)]
+    data[, date2 := as_date(`Local date`)]
+    data[, dow := wday(date2)]
+    data[, week := week(date2)]
+    data[, month := month(date2)]
+    data[, year := year(date2)]
+      
+    data <- data[data$date >= start_date & data$date < end_date, ]
+    nrows[[i]] = nrow(data)
+    avg[[i]] = mean(data$`NG: SUN`, na.rm=TRUE)
+    maxs[[i]] = max(data$`NG: SUN`, na.rm=TRUE)
+    mins[[i]] = min(data$`NG: SUN`, na.rm=TRUE)
+  }
+  myList = list(nrows, avg, maxs, mins)
+  return (myList)
+}
 
 findAvgSolar<- function(start_date, end_date){
   avgSolar<- list()
@@ -27,31 +69,186 @@ findAvgSolar<- function(start_date, end_date){
     print(country)
     #Read file and extract data
     data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 700000)
-    print("finish reading")
-    print(nrow(data))
+    #print("finish reading")
+    #print(nrow(data))
     setDT(data)
     data <- data[!is.na(`NG: SUN`)]
-    data <- data[!which('NG..SUN'<0)]
-    data <- data[!which('CO2.Emissions.Generated'>=0)]
-    data[, date2 := as_date(`Local date`)]
+    data <- data[!which(`NG: SUN`<0)]
+    data <- data[!which(`CO2 Emissions Generated`>=0)]
+     data[, date2 := as_date(`Local date`)]
     data[, dow := wday(date2)]
     data[, week := week(date2)]
     data[, month := month(date2)]
     data[, year := year(date2)]
+      
     
     data <- data[data$date >= start_date & data$date < end_date, ]
-    print(nrow(data))
+    #print(nrow(data))
     avgSolar[[i]] = mean(data$`NG: SUN`, na.rm=TRUE)
-    print(paste("avgSolar for ",country, " = ", avgSolar[[i]], sep=""))
+    #print(paste("avgSolar for ",country, " = ", avgSolar[[i]], sep=""))
   }
   return (array(unlist(avgSolar)))
 }
 
+findPercentSolar<- function(start_date, end_date){
+  print(start_date)
+  percentSolar<- list()
+  for (i in 1:length(countries)){
+    country = countries[i]
+    print(country)
+    #Read file and extract data
+    data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 700000)
+    #print("finish reading")
+    #print(nrow(data))
+    setDT(data)
+    data <- data[!is.na(`NG: SUN`)]
+    data <- data[!which(`NG: SUN`<0)]
+    data <- data[!which(`CO2 Emissions Generated`>=0)]
+     data[, date2 := as_date(`Local date`)]
+    data[, dow := wday(date2)]
+    data[, week := week(date2)]
+    data[, month := month(date2)]
+    data[, year := year(date2)]
+      
+    
+    data <- data[data$date >= start_date & data$date < end_date, ]
+    #print(nrow(data))
+    percentSolar[[i]] = (sum(data$`NG: SUN`, na.rm=TRUE)*100.0)/sum(data$NG, na.rm=TRUE)
+    print(paste("percentSolar for ",country, " = ", percentSolar[[i]], sep=""))
+  }
+  return (array(unlist(percentSolar)))
+}
+
+findPercentCoal<- function(start_date, end_date){
+  percentCoal<- list()
+  for (i in 1:length(countries)){
+    country = countries[i]
+    print(country)
+    #Read file and extract data
+    data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 700000)
+    #print("finish reading")
+    #print(nrow(data))
+    setDT(data)
+    data <- data[!is.na(`NG: SUN`)]
+    data <- data[!which(`NG: SUN`<0)]
+    data <- data[!which(`CO2 Emissions Generated`>=0)]
+     data[, date2 := as_date(`Local date`)]
+    data[, dow := wday(date2)]
+    data[, week := week(date2)]
+    data[, month := month(date2)]
+    data[, year := year(date2)]
+      
+    
+    data <- data[data$date >= start_date & data$date < end_date, ]
+    #print(nrow(data))
+    percentCoal[[i]] = (sum(data$`NG: COL`, na.rm=TRUE)*100.0)/sum(data$NG, na.rm=TRUE)
+    #print(paste("percentSolar for ",country, " = ", percentSolar[[i]], sep=""))
+  }
+  return (array(unlist(percentCoal)))
+}
+
+findDifferenceCO2<- function(baseSolar, increasedSolar, maxSolar){
+  diff<- list()
+  for (i in 1:length(countries)){
+    country = countries[i]
+    print(country)
+    if (country=="NY"){
+      diff[[i]] = 0
+    }
+    else{
+      
+      #Read file and extract data
+      load(paste("dlnm_mod_June9_", countries[i], ".Rda", sep=""))
+      
+      baseCO2 = summary(dm, pred.at = baseSolar[i])
+      if(increasedSolar[i]>maxSolar[i]){
+        increasedSolar[i] = maxSolar[i]
+      }
+      increasedCO2 = summary(dm, pred.at = increasedSolar[i])
+      diff[[i]] = -increasedCO2$cumulative.effect$mean + baseCO2$cumulative.effect$mean
+    }
+  }
+  return (array(unlist(diff)))
+}
 ```
 
 ```{r}
-library(sf)
 plot_data <- readRDS("../plot_data/eia_region_polygons.rds")
-plot_data["solar"] = findAvgSolar("2018-07-01","2023-06-13")
-ggplot(plot_data, aes(fill=solar),color =NA,size=0.5,alpha=1) + geom_sf() +  scale_fill_viridis_c(option = "B")
+plot_data["solarAvg"] = findAvgSolar("2018-07-01","2023-06-13")
+plot_data["solarPercent"] = findPercentSolar("2018-07-01","2023-06-13")
+plot_data["coalPercent"] = findPercentCoal("2018-07-01","2023-06-13")
+```
+```{r}
+myList = details("2018-07-01","2023-06-13")
+plot_data["rows"] = array(unlist(myList[1]))
+plot_data["solarAvg"] = array(unlist(myList[2]))
+plot_data["solarMax"] = array(unlist(myList[3]))
+plot_data["solarMin"] = array(unlist(myList[4]))
+```
+```{r}
+plot_data["CO2_diff_10"] = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+10, plot_data$solarMax)
+plot_data["CO2_diff_100"] = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+100, plot_data$solarMax)
+plot_data["CO2_diff_1000"] = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+1000, plot_data$solarMax)
+```
+
+```{r}
+jpeg(paste("US-AvgSolar.jpg", sep=""))
+ggplot(plot_data, aes(fill=solarAvg),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 5, palette="vik")
+dev.off()
+```
+
+```{r}
+jpeg(paste("US-PercentSolar.jpg", sep=""))
+ggplot(plot_data, aes(fill=solarPercent),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "A")
+scale_fill_scico(midpoint = 1, palette="vik")
+dev.off()
+```
+
+```{r}
+jpeg(paste("US-PercentCoal.jpg", sep=""))
+ggplot(plot_data, aes(fill=coalPercent),color =NA,size=0.5,alpha=1) + geom_sf() +  scale_fill_viridis_c(option = "H")
+dev.off()
+```
+
+```{r}
+jpeg(paste("US-CO2_diff_10.jpg", sep=""))
+ggplot(plot_data, aes(fill=CO2_diff_10),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 5, palette="vik")
+dev.off()
+```
+
+```{r}
+jpeg(paste("US-CO2_diff_100.jpg", sep=""))
+ggplot(plot_data, aes(fill=CO2_diff_100),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 5, palette="vik")
+dev.off()
+```
+
+```{r}
+jpeg(paste("US-CO2_diff_1000.jpg", sep=""))
+ggplot(plot_data, aes(fill=CO2_diff_1000),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 5, palette="vik")
+dev.off()
+```
+
+```{r}
+years = c("2018-07-01","2019-07-01","2020-07-01","2021-07-01", "2022-07-01", "2023-06-13")
+for (y in 1:(length(years)-1)){
+  start_date = years[y]
+  end_date = years[y+1]
+  plot_data["solarPercent"] = findPercentSolar(start_date,end_date)
+  jpeg(paste("US-PercentSolar",start_date,end_date,".jpg", sep="_"))
+  ggplot(plot_data, aes(fill=solarPercent),color =NA,size=0.5,alpha=1) + geom_sf() +  scale_fill_viridis_c(option = "A")
+  dev.off() 
+}
+```
+
+```{r}
+for (i in 1:length(countries)){
+  plot_data["solarCoefficient"] = findCoefficientSolar()
+  jpeg(paste("US-CoefficentSolar.jpg", sep=""))
+  ggplot(plot_data, aes(fill=solarCoefficient),color =NA,size=0.5,alpha=1) + geom_sf() +  scale_fill_viridis_c(option = "A")
+  dev.off() 
+}
 ```
