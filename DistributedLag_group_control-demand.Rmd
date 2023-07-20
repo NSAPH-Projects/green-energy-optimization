@@ -23,18 +23,22 @@ library(readxl)
 ```
 
 ```{r}
-setwd("/n/dominici_lab/lab/fossil_fuel_energy/data/")
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
 data_list <- list()
 lag_data_list <- list()
 lead_data_list <- list()
 complete_list <- list()
 for (i in (1:length(countries))){
-
-  data <- read_xlsx(paste("energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 50000)
+  print(countries[i])
+  data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
+  #print(nrow(data))
   setDT(data)
-  data <- data[!is.na(`NG: SUN`)]
-  data <- data[!which('NG..SUN'<0)]
+  
+  # Use filters after the shifted solar data is created
+  #data <- data[!is.na(`NG: SUN`)]
+  #data <- data[!which(`NG: SUN`<0)]
+  #data <- data[which(`CO2 Emissions Generated`>0)]
+  
   data[, date2 := as_date(`Local date`)]
   data[, dow := wday(date2)]
   data[, week := week(date2)]
@@ -47,7 +51,15 @@ for (i in (1:length(countries))){
   setnames(data, make.names(names(data)))
   #print(colnames(data))
   
+  # Only consider data between during time period
+  start_date = "2018-06-01"
+  end_date = "2023-06-13"
+  data <- data[data$date2 >= start_date & data$date2 < end_date, ]
   
+  #convert negative solar values and zero CO2 emissions as NA. 
+  data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), NA)
+  data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated  <= 0), NA)
+
   # Create lagged data
   lags <- 12
   lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
@@ -55,22 +67,21 @@ for (i in (1:length(countries))){
   #lag_dat <- cbind(lead_dat, lag_dat)
   # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
   # Complete data rows
-  
-  data_list[[i]]<-data
-  lag_data_list[[i]]<- lag_dat
+
+  data_list[[i]]<-data #Note: this data contain NA values
+  lag_data_list[[i]]<- lag_dat 
   #lead_data_list[[i]]<-lead_dat
   complete_list[[i]] <- which(complete.cases(lag_dat) & 
                             complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
 
-
-  
 }
 ```
+
 
 ```{r}
 # Individual Nonlinear lagged model
 
-#load("dlnm_mod_list.Rda")
+
 for (i in (1:length(countries))){
   data <- data_list[[i]]
   complete <- complete_list[[i]]
@@ -90,18 +101,29 @@ for (i in (1:length(countries))){
                                               exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10), #5%and 95% percentile
                                               #n.burn = 500, n.iter = 1000,
                                               monotone = T,
-                                              time.split.prob = rep(c(10, 3), c(5, 7)),
+                                              time.split.prob = rep(c(10, 3), c(5, 8)),
                                               monotone.gamma0 = g0,
                                               monotone.sigma = s0#,
                                               #n.burn=100, n.iter=100
                                               )
   }))
   #dm<-dlnm_mod_list[[i]]
-  save(dm,file=paste("dlnm_mod_June9_",countries[i],".Rda",sep=""))
+  save(dm,file=paste("dlnm_mod_June12_",countries[i],".Rda",sep=""))
   #save(dlnm_mod_list,file="dlnm_mod_list.Rda")
 }
 
 ```
+
+
+```{r}
+#linear model
+library(mgcv)
+m_linear <- lm(CO2~ SUN + ..., data) #or exposure.se = 10000
+m_smooth <- gam(formula + s(SUN), data)
+AIC(m_smooth)
+AIC(m_linear)
+```
+
 
 ```{r}
 #save(dlnm_mod_list,file="dlnm_mod_list.Rda")
@@ -110,31 +132,33 @@ for (i in (1:length(countries))){
 ```{r}
 #load("dlnm_mod_list.Rda")
 for (i in (1:length(countries))){
-  load(paste("dlnm_mod_June9_",countries[i],".Rda",sep=""))
+  load(paste("dlnm_mod_June12_",countries[i],".Rda",sep=""))
   
-  jpeg(paste("qqplot_June9_",countries[i],".jpg", sep=""))
+  jpeg(paste("qqplot_June12_",countries[i],".jpg", sep=""))
   qqnorm(scale(dm$Y - dm$Yhat)); abline(0, 1)
   dev.off()
 }
 
 for (i in (1:length(countries))){
-  load(paste("dlnm_mod_June9_",countries[i],".Rda",sep=""))
+  load(paste("dlnm_mod_June12_",countries[i],".Rda",sep=""))
   
-  jpeg(paste("difference_June9_",countries[i],".jpg", sep=""))
+  jpeg(paste("difference_June12_",countries[i],".jpg", sep=""))
   plot(dm$Y, dm$Yhat-dm$Y)
   dev.off()
 }
 ```
+
+
 
 ```{r}
 
 for (i in (1:length(countries))){
   print(paste("country: ", countries[i], sep=""))
   #dlnm_mod <- dlnm_mod_list[[i]]
-  load(paste("dlnm_mod_May30_",countries[i],".Rda",sep=""))
+  load(paste("dlnm_mod_June12_",countries[i],".Rda",sep=""))
   
   s_dlnm_mod <- summary(dm, cenval = 0, conf.level = .9)
-  jpeg(paste("lineplot_May30_",countries[i],".jpg", sep=""))
+  jpeg(paste("lineplot_June12_",countries[i],".jpg", sep=""))
   plot(0:lags, s_dlnm_mod$splitProb, type = 'l', ylim = 0:1,
        main = paste(countries[i], " Region", sep=""),
        xlab = "lag (+)", ylab = "Prob effect"); abline(h = 0.95, lty = 2)
@@ -145,18 +169,17 @@ for (i in (1:length(countries))){
 ```{r}
 for (i in (1:length(countries))){
   #dlnm_mod <- dlnm_mod_list[[i]]
-  if(i>9){
-    load(paste("dlnm_mod_May30_",countries[i],".Rda",sep=""))
+    load(paste("dlnm_mod_June12_",countries[i],".Rda",sep=""))
     s_dlnm_mod <- summary(dm, cenval = 0, conf.level = .9)
-    jpeg(paste("heatmap_May30_",countries[i],".jpg", sep=""))
+    jpeg(paste("heatmap_June12_",countries[i],".jpg", sep=""))
     plot(s_dlnm_mod, start.time = 0,
        xlab = "Lag hour",
        ylab = "Solar generation",
        flab = "Decreased CO2",
-       main = paste(countries[i], " Region", sep=""))
+       main = paste(countries[i], " Region", sep="")) + scale_fill_viridis_c(limits=c(-1000, 6000)) # c(0,720)
     dev.off()
-  }
 }
+
 ```
 
 ```{r}
@@ -199,7 +222,8 @@ year_wise_analysis <- function(country, start_date, end_date){
   data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", country, ".xlsx", sep=""), guess_max = 50000)
   setDT(data)
   data <- data[!is.na(`NG: SUN`)]
-  data <- data[!which('NG..SUN'<0)]
+  data <- data[!which(`NG: SUN`<0)]
+  data <- data[which(`CO2 Emissions Generated`>=0)]
   data[, date2 := as_date(`Local date`)]
   data[, dow := wday(date2)]
   data[, week := week(date2)]
@@ -282,10 +306,17 @@ for (i in 1:length(country_list)){
 
 ```{r}
 run_analysis <- function(combo, base, other){
+    print(paste("base=",base, ", other=", other, sep=""))
     data <- combo
     setDT(data)
-    data <- data[!is.na(`NG..SUN`)]
-    
+    #print(colnames(data))
+    #data <- data[!is.na(`NG: SUN`)]
+    #print(nrow(data))
+    #data <- data[!which(`NG: SUN`<0)]
+    #print(nrow(data))
+    #data <- data[which(`CO2 Emissions Generated`>=0)]
+    #print(nrow(data))
+
     data[, date2 := as_date(`Local.date`)]
     data[, dow := wday(date2)]
     data[, week := week(date2)]
@@ -296,28 +327,28 @@ run_analysis <- function(combo, base, other){
     
     # Make column names safe for use in formulas
     setnames(data, make.names(names(data)))
-    print(colnames(data))
+    #print(colnames(data))
     
     
     # Create lagged data
-    lags <- 6
-    lag_dat <- as.matrix(data[, shift(NG..SUN, 0:6, type = "lag")])
+    lags <- 12
+    lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
     #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
     #lag_dat <- cbind(lead_dat, lag_dat)
     complete<- which(complete.cases(lag_dat) & 
                                 complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
     
     dlnm_mod_directed <- combine.models(lapply(1:5, function(j) {
-                                    tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) + ns(index, df = 4)* ns(Hour, df = 5) + demand,       
+                                    tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) + ns(index, df = 4)* ns(Hour, df = 5) + demand + NG..SUN.y,       
                                                   data[complete],
                                                   exposure.data = lag_dat[complete,],
                                                   exposure.splits = seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10), #5%and 95% percentile
                                                   #n.burn = 500, n.iter = 1000,
                                                   monotone = T,
-                                                  time.split.prob = rep(c(10, 1), c(4, 2)))
+                                                  time.split.prob = rep(c(10, 3), c(5, 8)))
       }))
     
-    save(dlnm_mod_directed,file=paste("dlnm_mod_directed_May30_",paste(base, other, sep="_"),".Rda", sep=""))
+    save(dlnm_mod_directed,file=paste("dlnm_mod_directed_June12_",paste(base, other, sep="_"),".Rda", sep=""))
 
 }
 ```
@@ -378,24 +409,31 @@ generate_plots<- function(base, other, k){
 
 ```{r}
 #One country's CO2 reduction based on the "base" country
-for (i in (1:length(countries))){
-  for(j in (1:length(countries))){
-    if(i!=j){
-      base_country <- countries[i]
-      other_country <- countries[j]
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+base_countries =c(5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)#c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+other_countries =c(6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)#c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+for (i in (1:length(base_countries))){
+  {
+    {
+    
+      base_country <- countries[base_countries[i]]
+      other_country <- countries[other_countries[i]]
+      
+      print(paste(base_country, other_country, sep="_"))
       
       #Load data of base_country
-      d<- data_list[[i]]
+      d<- data_list[[base_countries[i]]]
       
       #Only keep the desired number of columns
-      d <- d[, c("UTC.time", "D", "NG..SUN", "CO2.Emissions.Generated")]
+      d <- d[, c("UTC.time", "NG..SUN")]
       
       #Create one merged file
-      d<-merge(d, data_list[[j]], by=c("UTC.time"))
-      d$D<- d$D.y
+      d<-merge(d, data_list[[other_countries[i]]], by=c("UTC.time"))
+      print(colnames(d))
+      #d$D<- d$D.y
       d$NG..SUN<- d$NG..SUN.x 
-      d$CO2.Emissions.Generated <- d$CO2.Emissions.Generated.y
-      d <- d[, c("Local.date", "Hour", "D", "NG..SUN", "CO2.Emissions.Generated")]
+      #d$CO2.Emissions.Generated <- d$CO2.Emissions.Generated.y
+      d <- d[, c("Local.date", "Hour", "D", "NG..SUN", "NG..SUN.y", "CO2.Emissions.Generated")]
       
       #Run analysis
       run_analysis(combo = d, base = base_country, other = other_country)
@@ -428,3 +466,4 @@ for (i in (1:length(countries))){
   }
 }
 ```
+

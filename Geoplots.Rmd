@@ -18,6 +18,89 @@ library(readxl)
 library(sf)
 library(ggplot2)
 library(scico)
+library(dlmtree)
+library(plotrix)
+```
+
+```{r}
+data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_US48.xlsx", sep=""), guess_max = 70000)
+setDT(data)
+
+print(nrow(data))
+data <- data[!is.na(`NG: SUN`)]
+data <- data[!which(`NG: SUN`<0)]
+data <- data[which(`CO2 Emissions Generated`>0)]
+print(nrow(data))
+
+data[, date := as_date(`Local date`)]
+data[, dow := wday(date)]
+data[, week := week(date)]
+data[, month := month(date)]
+data[, year := year(date)]
+
+
+#Extract rows from a particular year
+#data <- data[data$date >= start_date & data$date < end_date, ]
+
+# Make column names safe for use in formulas
+setnames(data, make.names(names(data)))
+
+data2 <- data %>%
+  group_by(year, month) %>%
+  summarise(CO2 = mean(CO2.Emissions.Generated), solar = mean(NG..SUN))
+
+data2 = mutate(data2, month_year = as.Date(paste0(year, "-", month,"-01"),"%Y-%m-%d"))
+
+library(patchwork) # To display 2 charts together
+library(hrbrthemes)
+# Most basic line chart
+p1 <- ggplot(data2, aes(x=month_year)) +
+  geom_line(aes(y=CO2/10), color="grey") +
+  geom_point(aes(y=CO2/10), shape=21, color="black", fill="#69b3a2", size=2)+
+  geom_line(aes(y=solar), color="orange") +
+  geom_point(aes(y=solar), shape=21, color="black", fill="orange", size=2) +
+  ggtitle("Monthly average CO2 emissions and Solar generation") +
+  
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Average monthly CO2 emissions (in 10 metric tons)",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis( ~.*1, name="Average monthly solar generation (in MWh)")
+  ) +
+
+  theme_ipsum() +
+  theme(axis.text.x=element_text(angle=60, hjust=1)) +
+  scale_x_date(limit=c(as.Date("2018-07-01"),as.Date("2023-06-01")))
+  
+
+
+data2 <- data %>%
+  group_by(year) %>%
+  summarise(CO2 = mean(CO2.Emissions.Generated), solar = mean(NG..SUN))
+
+p2 <- ggplot(data2, aes(x=year)) +
+  geom_line(aes(y=CO2/10), color="grey") +
+  geom_point(aes(y=CO2/10), shape=21, color="black", fill="#69b3a2", size=2)+
+  geom_line(aes(y=solar), color="orange") +
+  geom_point(aes(y=solar), shape=21, color="black", fill="orange", size=2) +
+  ggtitle("Annual average CO2 emissions and Solar generation") +
+  
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Annual average CO2 emissions (in 10 metric tons)",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis( ~.*1, name="Annual average solar generation (in MWh)")
+  ) +
+
+  theme_ipsum() +
+  theme(axis.text.x=element_text(angle=60, hjust=1))
+
+# Display both charts side by side thanks to the patchwork package
+#p1 + p2
 ```
 
 ```{r}
@@ -36,6 +119,7 @@ details<- function(start_date, end_date){
   avg <- list()
   maxs<-list()
   mins<-list()
+  avgCO2<- list()
   for (i in 1:length(countries)){
     country = countries[i]
     print(country)
@@ -45,7 +129,7 @@ details<- function(start_date, end_date){
     setDT(data)
     data <- data[!is.na(`NG: SUN`)]
     data <- data[!which(`NG: SUN`<0)]
-    data <- data[!which('CO2.Emissions.Generated'>=0)]
+    data <- data[which(`CO2 Emissions Generated`>0)]
     data[, date2 := as_date(`Local date`)]
     data[, dow := wday(date2)]
     data[, week := week(date2)]
@@ -57,8 +141,9 @@ details<- function(start_date, end_date){
     avg[[i]] = mean(data$`NG: SUN`, na.rm=TRUE)
     maxs[[i]] = max(data$`NG: SUN`, na.rm=TRUE)
     mins[[i]] = min(data$`NG: SUN`, na.rm=TRUE)
+    avgCO2[[i]] = mean(data$`CO2 Emissions Generated`, na.rm=TRUE)
   }
-  myList = list(nrows, avg, maxs, mins)
+  myList = list(nrows, avg, maxs, mins, avgCO2)
   return (myList)
 }
 
@@ -74,8 +159,8 @@ findAvgSolar<- function(start_date, end_date){
     setDT(data)
     data <- data[!is.na(`NG: SUN`)]
     data <- data[!which(`NG: SUN`<0)]
-    data <- data[!which(`CO2 Emissions Generated`>=0)]
-     data[, date2 := as_date(`Local date`)]
+    data <- data[which(`CO2 Emissions Generated`>0)]
+    data[, date2 := as_date(`Local date`)]
     data[, dow := wday(date2)]
     data[, week := week(date2)]
     data[, month := month(date2)]
@@ -103,8 +188,8 @@ findPercentSolar<- function(start_date, end_date){
     setDT(data)
     data <- data[!is.na(`NG: SUN`)]
     data <- data[!which(`NG: SUN`<0)]
-    data <- data[!which(`CO2 Emissions Generated`>=0)]
-     data[, date2 := as_date(`Local date`)]
+    data <- data[which(`CO2 Emissions Generated`>0)]
+    data[, date2 := as_date(`Local date`)]
     data[, dow := wday(date2)]
     data[, week := week(date2)]
     data[, month := month(date2)]
@@ -131,7 +216,7 @@ findPercentCoal<- function(start_date, end_date){
     setDT(data)
     data <- data[!is.na(`NG: SUN`)]
     data <- data[!which(`NG: SUN`<0)]
-    data <- data[!which(`CO2 Emissions Generated`>=0)]
+    data <- data[which(`CO2 Emissions Generated`>0)]
      data[, date2 := as_date(`Local date`)]
     data[, dow := wday(date2)]
     data[, week := week(date2)]
@@ -147,28 +232,83 @@ findPercentCoal<- function(start_date, end_date){
   return (array(unlist(percentCoal)))
 }
 
-findDifferenceCO2<- function(baseSolar, increasedSolar, maxSolar){
+findDifferenceCO2<- function(baseSolar, increasedSolar, maxSolar, avgCO2){
+  baseCO2<- list()
+  increasedCO2<- list()
   diff<- list()
+  pdiff <- list()
+  diff_vector <- list()
+  bar_mean <- list()
+  bar_sd <- list()
+  bar_lower <- list()
+  bar_upper <- list()
+  
+  diff_vector2 <- list()
+  mean_diff <- list()
+  sd_diff <- list()
+  error<- list()
   for (i in 1:length(countries)){
     country = countries[i]
     print(country)
     if (country=="NY"){
+      baseCO2[[i]] = 0
+      increasedCO2[[i]] =  0
       diff[[i]] = 0
+      pdiff[[i]] = 0
+      diff_vector[[i]] = 0
+      bar_mean[[i]] = 0
+      bar_sd[[i]] = 0
+      bar_lower[[i]] =0
+      bar_upper[[i]] =0
+      
+      diff_vector2[[i]] <-0
+      mean_diff[[i]] = 0
+      sd_diff[[i]] = 0
+      error[[i]] = 0
     }
     else{
       
       #Read file and extract data
-      load(paste("dlnm_mod_June9_", countries[i], ".Rda", sep=""))
+      load(paste("dlnm_mod_June12_", countries[i], ".Rda", sep=""))
       
-      baseCO2 = summary(dm, pred.at = baseSolar[i])
+      s_base = summary(dm, pred.at = baseSolar[i], mcmc=TRUE)
+      baseCO2[[i]] = summary(dm, pred.at = baseSolar[i])$cumulative.effect$mean #CO2 offset in one hour at the base solar level in the last 12 hours
       if(increasedSolar[i]>maxSolar[i]){
-        increasedSolar[i] = maxSolar[i]
+        increasedCO2[[i]] = 0 
+        diff[[i]] = 0 
+        pdiff[[i]] = 0
+        diff_vector[[i]] = 0
+        bar_mean[[i]] = 0
+        bar_sd[[i]] = 0
+        bar_lower[[i]] =0
+        bar_upper[[i]] =0
+        
+        diff_vector2[[i]] <-0
+        mean_diff[[i]] = 0
+        sd_diff[[i]] = 0
+        error[[i]] = 0
       }
-      increasedCO2 = summary(dm, pred.at = increasedSolar[i])
-      diff[[i]] = -increasedCO2$cumulative.effect$mean + baseCO2$cumulative.effect$mean
+      else{
+        
+        s_increased = summary(dm, pred.at = increasedSolar[i], mcmc=TRUE)
+        increasedCO2[[i]] = summary(dm, pred.at = increasedSolar[i])$cumulative.effect$mean  #multiple by number of rows
+        diff[[i]] = (increasedCO2[[i]] - baseCO2[[i]])/(increasedSolar[i] - baseSolar[i]) #- baseCO2[[i]]
+        pdiff[[i]] = (100 * (increasedCO2[[i]] - baseCO2[[i]]))/abs(avgCO2[i] - baseCO2[[i]])
+        
+        diff_vector[[i]] <-((s_increased$cumulative_mcmc - s_base$cumulative_mcmc))  / (increasedSolar[i] - baseSolar[i])
+        bar_mean[[i]] = mean(diff_vector[[i]])
+        bar_lower[[i]] =quantile(diff_vector[[i]], probs = 0.025)
+        bar_upper[[i]] =quantile(diff_vector[[i]], probs = 0.975)
+        bar_sd[[i]] = sd(diff_vector[[i]])
+        
+        diff_vector2[[i]] <-(s_base$cumulative_mcmc - s_increased$cumulative_mcmc)
+        mean_diff[[i]] = mean(diff_vector2[[i]])
+        sd_diff[[i]] = sd(diff_vector2[[i]])
+        error[[i]] <- qnorm(0.975)*sd_diff[[i]]
+      }
     }
   }
-  return (array(unlist(diff)))
+  return (list(diff, pdiff, baseCO2, increasedCO2, bar_mean, bar_lower, bar_upper, bar_sd, mean_diff, sd_diff, error))
 }
 ```
 
@@ -184,24 +324,110 @@ plot_data["rows"] = array(unlist(myList[1]))
 plot_data["solarAvg"] = array(unlist(myList[2]))
 plot_data["solarMax"] = array(unlist(myList[3]))
 plot_data["solarMin"] = array(unlist(myList[4]))
+plot_data["CO2Avg"] = array(unlist(myList[5]))
 ```
+
 ```{r}
-plot_data["CO2_diff_10"] = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+10, plot_data$solarMax)
-plot_data["CO2_diff_100"] = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+100, plot_data$solarMax)
-plot_data["CO2_diff_1000"] = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+1000, plot_data$solarMax)
+diff10 = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+10, plot_data$solarMax, plot_data$CO2Avg)
+
+diff100 = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+100, plot_data$solarMax, plot_data$CO2Avg)
+
+diff1000 = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+1000, plot_data$solarMax, plot_data$CO2Avg)
+
+diff5000 = findDifferenceCO2 (plot_data$solarAvg, plot_data$solarAvg+5000, plot_data$solarMax, plot_data$CO2Avg)
 ```
+
+```{r}
+plot_data["CO2_diff_10"] = array(unlist(diff10[1]))
+plot_data["CO2_diff_100"] = array(unlist(diff100[1]))
+plot_data["CO2_diff_1000"] = array(unlist(diff1000[1]))
+plot_data["CO2_diff_5000"] = array(unlist(diff5000[1]))
+```
+
+```{r}
+plot_data["CO2_pdiff_10"] = array(unlist(diff10[2]))
+plot_data["CO2_pdiff_100"] = array(unlist(diff100[2]))
+plot_data["CO2_pdiff_1000"] = array(unlist(diff1000[2]))
+plot_data["CO2_pdiff_5000"] = array(unlist(diff5000[2]))
+```
+
+
+```{r}
+plot_data["CO2_diff_mean_10"] = array(unlist(diff10[5]))
+plot_data["CO2_diff_mean_100"] = array(unlist(diff100[5]))
+plot_data["CO2_diff_mean_1000"] = array(unlist(diff1000[5]))
+plot_data["CO2_diff_mean_5000"] = array(unlist(diff5000[5]))
+
+plot_data["CO2_diff_lower_10"] = array(unlist(diff10[6]))
+plot_data["CO2_diff_lower_100"] = array(unlist(diff100[6]))
+plot_data["CO2_diff_lower_1000"] = array(unlist(diff1000[6]))
+plot_data["CO2_diff_lower_5000"] = array(unlist(diff5000[6]))
+
+
+plot_data["CO2_diff_upper_10"] = array(unlist(diff10[7]))
+plot_data["CO2_diff_upper_100"] = array(unlist(diff100[7]))
+plot_data["CO2_diff_upper_1000"] = array(unlist(diff1000[7]))
+plot_data["CO2_diff_upper_5000"] = array(unlist(diff5000[7]))
+
+
+plot_data["CO2_diff_std_10"] = array(unlist(diff10[9]))
+plot_data["CO2_diff_std_100"] = array(unlist(diff100[9]))
+plot_data["CO2_diff_std_1000"] = array(unlist(diff1000[9]))
+plot_data["CO2_diff_std_5000"] = array(unlist(diff5000[9]))
+
+
+plot_data["CO2_diff_error_10"] = array(unlist(diff10[11]))
+plot_data["CO2_diff_error_100"] = array(unlist(diff100[11]))
+plot_data["CO2_diff_error_1000"] = array(unlist(diff1000[11]))
+plot_data["CO2_diff_error_5000"] = array(unlist(diff5000[11]))
+```
+
+
+```{r}
+# Load ggplot2
+library(ggplot2)
+plot_data2 <- plot_data
+#plot_data2$CO2_diff_std_10 = plot_data2$CO2_diff_std_10*100
+#plot_data2$CO2_diff_std_100 = plot_data2$CO2_diff_std_100*100
+#plot_data2$CO2_diff_std_1000 = plot_data2$CO2_diff_std_1000*100
+#plot_data2$CO2_diff_std_5000 = plot_data2$CO2_diff_std_5000*100
+#% Reduction in CO2 at y=1000
+
+# Most basic error bar
+ggplot(plot_data2) +
+    geom_bar( aes(x=countries, y=plot_data2$CO2_diff_mean_10), stat="identity", fill="skyblue", alpha=0.7) +
+    geom_errorbar( aes(x=countries, ymin=plot_data2$CO2_diff_lower_10, ymax=plot_data2$CO2_diff_upper_10), width=0.4, colour="orange", alpha=0.9, linewidth=1.3) + labs(y= "CO2 diff with +10 MWh solar") #+ lims(y=c(-6000, 15000))
+
+# Most basic error bar
+ggplot(plot_data2) +
+    geom_bar( aes(x=countries, y=plot_data2$CO2_diff_mean_100), stat="identity", fill="skyblue", alpha=0.7) +
+    geom_errorbar( aes(x=countries, ymin=plot_data2$CO2_diff_lower_100, ymax=plot_data2$CO2_diff_upper_100), width=0.4, colour="orange", alpha=0.9, linewidth=1.3)+ labs(y= "CO2 diff with +100 MWh solar")#+ lims(y=c(-6000, 15000))
+
+# Most basic error bar
+ggplot(plot_data2) +
+    geom_bar( aes(x=countries, y=plot_data2$CO2_diff_mean_1000), stat="identity", fill="skyblue", alpha=0.7) +
+    geom_errorbar( aes(x=countries, ymin=plot_data2$CO2_diff_lower_1000, ymax=plot_data2$CO2_diff_upper_1000), width=0.4, colour="orange", alpha=0.9, linewidth=1.3)+ labs(y= "CO2 diff with +1000 MWh solar")#+ lims(y=c(-6000, 15000))
+
+# Most basic error bar
+ggplot(plot_data2) +
+    geom_bar( aes(x=countries, y=plot_data2$CO2_diff_mean_5000), stat="identity", fill="skyblue", alpha=0.7) +
+    geom_errorbar( aes(x=countries, ymin=plot_data2$CO2_diff_lower_5000, ymax=plot_data2$CO2_diff_upper_5000), width=0.4, colour="orange", alpha=0.9, linewidth=1.3)+ labs(y= "CO2 diff with +5000 MWh solar")# + lims(y=c(-6000, 15000))
+```
+
+
+
 
 ```{r}
 jpeg(paste("US-AvgSolar.jpg", sep=""))
 ggplot(plot_data, aes(fill=solarAvg),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
-scale_fill_scico(midpoint = 5, palette="vik")
+scale_fill_scico(midpoint = 100, palette="vik")
 dev.off()
 ```
 
 ```{r}
 jpeg(paste("US-PercentSolar.jpg", sep=""))
 ggplot(plot_data, aes(fill=solarPercent),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "A")
-scale_fill_scico(midpoint = 1, palette="vik")
+scale_fill_scico(midpoint = 2, palette="vik")
 dev.off()
 ```
 
@@ -214,21 +440,64 @@ dev.off()
 ```{r}
 jpeg(paste("US-CO2_diff_10.jpg", sep=""))
 ggplot(plot_data, aes(fill=CO2_diff_10),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
-scale_fill_scico(midpoint = 5, palette="vik")
+scale_fill_scico(midpoint = 0, palette="vik")
+dev.off()
+```
+
+```{r}
+plot_data2 <- plot_data
+plot_data2$CO2_diff_mean_10[plot_data2$CO2_diff_mean_10>100] = 100
+jpeg(paste("US-CO2_pdiff_10.jpg", sep=""))
+ggplot(plot_data, aes(fill=CO2_diff_mean_10),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 0, palette="vik", limits=c(0, 100))
 dev.off()
 ```
 
 ```{r}
 jpeg(paste("US-CO2_diff_100.jpg", sep=""))
 ggplot(plot_data, aes(fill=CO2_diff_100),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
-scale_fill_scico(midpoint = 5, palette="vik")
+scale_fill_scico(midpoint = 0, palette="vik")
+dev.off()
+```
+
+```{r}
+plot_data2 <- plot_data
+plot_data2$CO2_diff_mean_100[plot_data2$CO2_diff_mean_100>100] = 100
+jpeg(paste("US-CO2_pdiff_100.jpg", sep=""))
+ggplot(plot_data2, aes(fill=CO2_diff_mean_100),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 0, palette="vik", limits=c(0, 100))
 dev.off()
 ```
 
 ```{r}
 jpeg(paste("US-CO2_diff_1000.jpg", sep=""))
 ggplot(plot_data, aes(fill=CO2_diff_1000),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
-scale_fill_scico(midpoint = 5, palette="vik")
+scale_fill_scico(midpoint = 0, palette="vik")
+dev.off()
+```
+
+```{r}
+plot_data2 <- plot_data
+plot_data2$CO2_diff_mean_1000[plot_data2$CO2_diff_mean_1000>100] = 100
+jpeg(paste("US-CO2_pdiff_1000.jpg", sep=""))
+ggplot(plot_data2, aes(fill=CO2_diff_mean_1000),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 0, palette="vik", limits=c(0, 100))
+dev.off()
+```
+
+```{r}
+jpeg(paste("US-CO2_diff_5000.jpg", sep=""))
+ggplot(plot_data, aes(fill=CO2_diff_5000),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 0, palette="vik")
+dev.off()
+```
+
+```{r}
+plot_data2 <- plot_data
+plot_data2$CO2_diff_mean_5000[plot_data2$CO2_diff_mean_5000>100] = 100
+jpeg(paste("US-CO2_pdiff_5000.jpg", sep=""))
+ggplot(plot_data2, aes(fill=CO2_diff_mean_5000),color =NA,size=0.5,alpha=1) +  geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 0, palette="vik", limits=c(0, 100)) 
 dev.off()
 ```
 
@@ -250,5 +519,75 @@ for (i in 1:length(countries)){
   jpeg(paste("US-CoefficentSolar.jpg", sep=""))
   ggplot(plot_data, aes(fill=solarCoefficient),color =NA,size=0.5,alpha=1) + geom_sf() +  scale_fill_viridis_c(option = "A")
   dev.off() 
+}
+```
+
+```{r}
+increase_by=10
+
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+res = matrix("", length(countries)+1, length(countries)+1)
+base_countries =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+other_countries =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+for(k in 1:length(countries)){
+    i = base_countries[k]
+    j = other_countries[k]
+    load(paste("dlnm_mod_directed_June9_",paste(countries[i], countries[j], sep="_"),".Rda", sep=""))
+    if(plot_data$solarAvg[j]+increase_by > plot_data$solarMax[j]){
+      res[i,j] = 0
+    }
+    else{
+      s<- summary(dlnm_mod_directed, pred.at = plot_data$solarAvg[j]+increase_by, mcmc=TRUE)
+    
+      res[i,j] = round(s$cumulative.effect$mean, 2) 
+    }
+    
+}
+write.csv(res, paste("result_", increase_by, ".csv", sep=""))
+```
+
+```{r}
+# Plot with diff levels of solar (quantiles across nonzero solar values)
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+load("data_list_June12.Rda")
+for (j in 1:length(countries)){
+  q <- c(0.1, 0.25, 0.5, 0.75, 0.9)
+  s <- quantile(data_list[[j]]$NG..SUN, 
+                c(0.1, 0.25, 0.5, 0.75, 0.9), na.rm = T)
+  load(paste("dlnm_mod_June12_", countries[j], ".Rda", sep=""))
+  if(s[1]==s[2]){
+    q = q[2:length(q)]
+  }
+  s_dm <- summary(dm, pred.at = s, cenval = 0)
+  plot_dat <- rbindlist(lapply(1:length(q), function(i) {
+    data.table(quantile = q[i],
+               lag = 0:12,
+               dlnm_est = s_dm$matfit[i,],
+               cumulative_est = s_dm$cumulative.effect[i, 2],
+               cumulative_low = s_dm$cumulative.effect[i, 3],
+               cumulative_high = s_dm$cumulative.effect[i, 4])
+  }))
+  
+  jpeg(paste("lags_June12_",countries[j],".jpg", sep=""))
+  p <- ggplot(plot_dat,
+         aes(x = lag, y = dlnm_est, 
+             color = factor(quantile), linetype = factor(quantile))) +
+    geom_line(size = 1) +
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "bottom") +
+    scale_x_continuous(expand = c(0, 0)) +
+    labs(x = "Lags (hour)", y = "CO2 offset (metric tons)", color = "", linetype = "",
+         title = paste("Region: ", countries[j], sep=""))
+   print(p)
+   dev.off()
+  #ggplot(plot_dat[lag == 0],
+  #       aes(x = factor(quantile), y = cumulative_est,
+  #           ymin = cumulative_low, ymax = cumulative_high)) +
+  #  geom_point(size = 2) +
+  #  geom_errorbar(size = 1) +
+  #  theme_minimal(base_size = 16) +
+  #  theme(legend.position = "bottom") +
+  #  labs(x = "Quantile", y = "CO2 offset", color = "", linetype = "")
+ 
 }
 ```
