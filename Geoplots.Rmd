@@ -5,10 +5,6 @@ date: "2023-06-28"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ```{r}
 library(data.table)
 library(lubridate)
@@ -20,7 +16,215 @@ library(ggplot2)
 library(scico)
 library(dlmtree)
 library(plotrix)
+library(latex2exp)
+
+#library(patchwork) # To display 2 charts together
+#library(hrbrthemes)
 ```
+
+```{r}
+countries <- c("CAL", "CAR", "CENT", "FlA", "MIDA", "MIDW", "NE", "NW",
+             "SE", "SW", "TEN", "TEX")
+start_date = "2018-07-01"
+end_date = "2023-07-01"
+
+get_data<- function(r){
+  cat(r, "")
+  data <- read_xlsx(paste0("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", r, ".xlsx"), guess_max = 70000)
+  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`NG: SUN`  < 0), NA)
+  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`CO2 Emissions Generated`  <= 0), NA)
+  data <- data[data$`Local date` >= start_date & data$`Local date` < end_date, ]
+  return (data)
+}
+```
+
+```{r}
+# Lagged effect and Cumulative effect plots
+plot_dat <- list()
+for (r in countries) {
+  data<- get_data(r)
+  load(paste0("dlnm_mod_June30_", r, ".Rda"))
+  baseSolar <- mean(data$`NG: SUN`, na.rm = T)
+  s <- c(1, seq(50, 5000, by = 50))
+  s <- s[s + baseSolar < quantile(data$`NG: SUN`, 0.995, na.rm = T)]
+  s_dm <- summary(dm, pred.at = s + baseSolar, cenval = baseSolar, verbose = FALSE)
+  plot_dat[[r]] <-
+    data.table(region = r,
+               increase = s[s + baseSolar <= max(s_dm$pred.at)],
+               cumulative = -s_dm$cumulative.effect[,2],
+               lower = -s_dm$cumulative.effect[,3],
+               upper = -s_dm$cumulative.effect[,4])
+}
+```
+
+```{r}
+plot_dat_all <- rbindlist(plot_dat)
+plot_dat_all$region_named <- 
+  factor(plot_dat_all$region, 
+         labels = c("California", "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest",
+                    "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas"))
+```
+
+```{r}
+# Line plot
+ggplot(plot_dat_all, aes(x = increase, y = cumulative/increase, 
+                         color = region_named, linetype = region_named)) +
+  geom_line(size = 1) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1.5, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0), 
+                     limits = c(1, 5050)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(x = "Solar Increase (MWh) above current baseline",
+       y = TeX(r'(CO2)'),
+       color = "", linetype = "")
+```
+
+```{r}
+# Facet plot
+png(paste("CO2_offset.png", sep=""))
+p<- ggplot(plot_dat_all, aes(x = increase, y = cumulative/increase, 
+                         ymin = lower/increase, ymax = upper/increase)) +
+  geom_point(aes(x = 1, y = 0), size = 0) + # uniformly scale y-axis to include 0
+  geom_ribbon(fill = "grey") +
+  geom_line(size = 0.8) +
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(limits = c(0,22), expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'(Solar increment $\epsilon$ MWh)'),
+       y = TeX(r'($\hat{\Delta}_r( x_0^r+\epsilon, x_0^r)$ metric tons)'))+
+  theme(axis.text.x=element_text(angle=45, hjust=1)) 
+print(p)
+dev.off()
+```
+
+```{r}
+# Facet plot for cumulative 
+png(paste("CO2_offset.png", sep=""))
+p<- ggplot(plot_dat_all, aes(x = increase, y = cumulative/increase, 
+                         ymin = lower/increase, ymax = upper/increase)) +
+  geom_point(aes(x = 1, y = 0), size = 0) + # uniformly scale y-axis to include 0
+  geom_ribbon(fill = "grey") +
+  geom_line(size = 0.8) +
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(limits = c(0,22), expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'($x_1-x_0^r$ in MWh)'),
+       y = TeX(r'($\hat{Delta}_r(x_1, x_0^r)$ in metric tons)'))+
+  theme(axis.text.x=element_text(angle=45, hjust=1)) 
+print(p)
+dev.off()
+```
+
+
+```{r}
+#Average CO2 reductions over all possible solar increase in CAL
+print(mean(plot_dat$CAL$cumulative/plot_dat$CAL$increase))
+#[1] -0.6338871
+
+#Average CO2 reductions over all possible solar increase in SW
+print(mean(plot_dat$SW$cumulative/plot_dat$SW$increase))
+#[1] -1.267932
+
+#Find solar increase at which the CO2 reductions per MWh of solar is maximum in Midwest
+MIDW_plot = cbind(plot_dat$MIDW, plot_dat$MIDW$cumulative/plot_dat$MIDW$increase)
+print(MIDW_plot[which.min(MIDW_plot$cumulative/MIDW_plot$increase)])
+#   region increase cumulative     lower     upper        V2
+#1:   MIDW     1450  -3154.074 -1837.052 -6889.016 -2.175224
+
+#Find solar increase at which the CO2 reductions per MWh of solar is maximum in Mid-Atlantic
+MIDA_plot = cbind(plot_dat$MIDA, plot_dat$MIDA$cumulative/plot_dat$MIDA$increase)
+print(MIDA_plot[which.min(MIDA_plot$cumulative/MIDA_plot$increase)])
+#   region increase cumulative     lower     upper        V2
+#1:   MIDA        1  -4.756011 -0.783446 -21.38044 -4.756011
+
+#Find the total CO2 savings in 10 years (in million metric tons)
+decade_savings <- list()
+for (i in 1:length(countries)){
+  df = plot_dat[countries[i]][[1]]
+  decade_savings<- rbind(decade_savings, df$cumulative[which(plot_dat$CAL$increase %in% c(100,200,500,1000,2000))]*365*10/1000000)
+  
+}
+colnames(decade_savings) <- c(100,200,500,1000,2000)
+rownames(decade_savings) <- countries
+write.csv(decade_savings, "decade_savings.csv")
+```
+
+```{r}
+# Percentile DLM plots
+plot_dat <- list()
+for (r in countries) {
+  print(r)
+  data <- read_xlsx(paste0("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", r, ".xlsx"), guess_max = 50000)
+  load(paste0("dlnm_mod_June12_new_", r, ".Rda"))
+  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`NG: SUN`  < 0), NA)
+  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`CO2 Emissions Generated`  <= 0), NA)
+  q <- c(0.25, 0.5, 0.75, 0.9)
+  s <- quantile(data$`NG: SUN`, 
+                probs = q, na.rm = T)
+  s_dm <- summary(dm, pred.at = s, cenval = 0, verbose = FALSE)
+  plot_dat[[r]] <- rbindlist(lapply(1:length(q), function(i) {
+    data.table(quantile = q[i],
+               solar = s[i],
+               lag = 0:12,
+               dlnm_est = -s_dm$matfit[i,],
+               cumulative_est = -s_dm$cumulative.effect[i, 2],
+               cumulative_low = -s_dm$cumulative.effect[i, 3],
+               cumulative_high = -s_dm$cumulative.effect[i, 4],
+               region = r)
+  }))
+}
+```
+
+```{r}
+plot_dat_all <- rbindlist(plot_dat)
+plot_dat_all$region_named <- 
+  factor(plot_dat_all$region, 
+         labels = c("California", "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest",
+                    "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas"))
+# Lag plot
+ggplot(plot_dat_all[region %in% c("NW", "CAL")],
+#ggplot(plot_dat_all,
+       aes(x = lag, y = dlnm_est, 
+           color = factor(quantile), linetype = factor(quantile))) +
+  geom_line(size = 1) +
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-3000,0), expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'(Lags $l$ in hours)'), y = TeX(r'($w_r(x, l)$ metric tons)'), 
+       color = TeX(r'(Solar quantile $x$)'), linetype = TeX(r'(Solar quantile $x$)'))
+```
+
+```{r}
+#NW average CO2 offset at solar quantile == x and lag = l
+x=0.5
+l=3 #4
+print((plot_dat$NW$dlnm_est[which(plot_dat$NW$quantile == x & plot_dat$NW$lag == l)]))
+#[1] 387.9726
+```
+
+
 
 ```{r}
 data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_US48.xlsx", sep=""), guess_max = 70000)
@@ -51,8 +255,6 @@ data2 <- data %>%
 
 data2 = mutate(data2, month_year = as.Date(paste0(year, "-", month,"-01"),"%Y-%m-%d"))
 
-library(patchwork) # To display 2 charts together
-library(hrbrthemes)
 # Most basic line chart
 p1 <- ggplot(data2, aes(x=month_year)) +
   geom_line(aes(y=CO2/10), color="grey") +
@@ -112,7 +314,7 @@ dev.off()
 ```
 
 ```{r}
-countries <- c('CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'NY', 'SE', 'SW', 'TEN', 'TEX', "CAL")
+countries <- c('CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'NY', 'SE', 'SW', 'TEN', 'TEX', 'CAL')
 
 details<- function(start_date, end_date){
   nrows<-list()
@@ -310,13 +512,42 @@ findDifferenceCO2<- function(baseSolar, increasedSolar, maxSolar, avgCO2){
   }
   return (list(diff, pdiff, baseCO2, increasedCO2, bar_mean, bar_lower, bar_upper, bar_sd, mean_diff, sd_diff, error))
 }
+
+findAverages<- function(start_date, end_date){
+  averages <- list()
+  for (i in 1:length(countries)){
+    country = countries[i]
+    print(country)
+    #Read file and extract data
+    data <- read_xlsx(paste("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", countries[i], ".xlsx", sep=""), guess_max = 700000)
+    #print("finish reading")
+    #print(nrow(data))
+    setDT(data)
+    data <- data[!is.na(`NG: SUN`)]
+    data <- data[!which(`NG: SUN`<0)]
+    data <- data[which(`CO2 Emissions Generated`>0)]
+    data[, date2 := as_date(`Local date`)]
+    data[, dow := wday(date2)]
+    data[, week := week(date2)]
+    data[, month := month(date2)]
+    data[, year := year(date2)]
+      
+    
+    data <- data[data$date2 >= start_date & data$date2 < end_date, ]
+    #print(nrow(data))
+    data <- data[, c("NG: NG", "NG: COL", "NG: NUC", "NG: OIL", "NG: OTH", "NG: WAT", "NG: SUN", "NG: WND", "Sum (NG)")]
+    average = colMeans(data, na.rm=TRUE)
+    averages <- cbind(averages, average)
+  }
+  colnames(averages) = countries
+  return (averages)
+}
 ```
 
 ```{r}
 plot_data <- readRDS("../plot_data/eia_region_polygons.rds")
-plot_data["solarAvg"] = findAvgSolar("2018-07-01","2023-06-13")
-plot_data["solarPercent"] = findPercentSolar("2018-07-01","2023-06-13")
-plot_data["coalPercent"] = findPercentCoal("2018-07-01","2023-06-13")
+#plot_data["solarPercent"] = findPercentSolar("2018-07-01","2023-06-13")
+#plot_data["coalPercent"] = findPercentCoal("2018-07-01","2023-06-13")
 ```
 ```{r}
 myList = details("2018-07-01","2023-06-13")
@@ -425,6 +656,13 @@ dev.off()
 ```
 
 ```{r}
+jpeg(paste("US-AvgCO2.jpg", sep=""))
+ggplot(plot_data, aes(fill=CO2Avg),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "C")
+scale_fill_scico(midpoint = 0, palette="broc")
+dev.off()
+```
+
+```{r}
 jpeg(paste("US-PercentSolar.jpg", sep=""))
 ggplot(plot_data, aes(fill=solarPercent),color =NA,size=0.5,alpha=1) + geom_sf() +  #scale_fill_viridis_c(option = "A")
 scale_fill_scico(midpoint = 2, palette="vik")
@@ -522,42 +760,165 @@ for (i in 1:length(countries)){
 }
 ```
 
+
 ```{r}
-increase_by=10
+name_countries = c("California", "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest",
+                    "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas")
+plot_dat <- list()
 
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-res = matrix("", length(countries)+1, length(countries)+1)
-base_countries =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
-other_countries =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
-for(k in 1:length(countries)){
-    i = base_countries[k]
-    j = other_countries[k]
-    load(paste("dlnm_mod_directed_June9_",paste(countries[i], countries[j], sep="_"),".Rda", sep=""))
-    if(plot_data$solarAvg[j]+increase_by > plot_data$solarMax[j]){
-      res[i,j] = 0
-    }
-    else{
-      s<- summary(dlnm_mod_directed, pred.at = plot_data$solarAvg[j]+increase_by, mcmc=TRUE)
+#res = matrix("", length(countries)+1, length(countries)+1)
+ 
+map_base =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+map_other =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+
+
+for (base in c(1,2,3,5,6,8,9,10,11,12)){
+        plot_dat <- list()
+        base_countries= map_base[map_base==base]
+        other_countries= map_other[map_base==base]
+        if(length(base_countries)>0){
+          for(k in 1:length(base_countries)){
+            i = base_countries[k]
+            j = other_countries[k]
+            data <- data_list[[i]]
+            load(paste("dlnm_mod_directed_June12_",paste(countries[i], countries[j], sep="_"),".Rda", sep=""))
+            baseSolar <- mean(data$NG..SUN, na.rm = T)
+            s <- c(1, seq(50, 5000, by = 50))
+            s <- s[s + baseSolar < quantile(data$NG..SUN, 0.995, na.rm = T)]
+            s_dm <- summary(dlnm_mod_directed, pred.at = s + baseSolar, cenval = baseSolar, verbose = FALSE)
+            plot_dat[[k]] <-
+              data.table(base = countries[i],
+                         other = countries[j],
+                         increase = s[s + baseSolar <= max(s_dm$pred.at)],
+                         cumulative = -s_dm$cumulative.effect[,2],
+                         lower = -s_dm$cumulative.effect[,3],
+                         upper = -s_dm$cumulative.effect[,4])
+            
+              #res[i,j] = round(s_dm$cumulative.effect[,2], 2) 
+        #    }
+            
+
+            
+          }
     
-      res[i,j] = round(s$cumulative.effect$mean, 2) 
-    }
-    
+        
+        #write.csv(res, paste("result_", increase_by, ".csv", sep=""))
+      
+        plot_dat_all <- rbindlist(plot_dat)
+        plot_dat_all$region_named <- 
+          factor(plot_dat_all$other, 
+                 labels = sort(name_countries[other_countries]))
+        # Line plot
+        #jpeg(paste(countries[base], "_solar2.jpg", sep=""))
+        p<- ggplot(plot_dat_all, aes(x = increase, y = cumulative/increase,
+                        ymin = lower/increase, ymax = upper/increase,
+                        color = region_named, linetype = region_named,
+                   fill=region_named)) +
+          geom_ribbon(alpha=0.15, linewidth=0)  +
+          geom_line(size = 1.5) +
+          theme_minimal(base_size = 16) +
+          theme(legend.position = "bottom", 
+                legend.key.width = unit(1.5, "cm"),
+                axis.line.x = element_line(color = "black"), 
+                axis.line.y = element_line(color = "black")) +
+          scale_x_continuous(expand = c(0, 0)) +
+          scale_y_continuous(limits = c(-2, 0), expand = c(0, 0)) +
+          labs(x = paste(TeX(r'(Solar increment in)'), name_countries[i], sep=" "),
+               y = TeX(r'($\hat{\Delta}_{r,r'}(x_0^r +\epsilon, x_0^r)$ metric tons)'),
+               color = "Region r'=", linetype = "Region r'=", fill="Region r'=")+
+          theme(axis.text.x=element_text(angle=45, hjust=1))
+        print(p)
+        dev.off()
+                
+        }
+        
 }
-write.csv(res, paste("result_", increase_by, ".csv", sep=""))
 ```
 
 ```{r}
-# Plot with diff levels of solar (quantiles across nonzero solar values)
+name_countries = c("California", "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest",
+                    "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas")
+plot_dat <- list()
+
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-load("data_list_June12.Rda")
-for (j in 1:length(countries)){
-  q <- c(0.1, 0.25, 0.5, 0.75, 0.9)
-  s <- quantile(data_list[[j]]$NG..SUN, 
-                c(0.1, 0.25, 0.5, 0.75, 0.9), na.rm = T)
-  load(paste("dlnm_mod_June12_", countries[j], ".Rda", sep=""))
-  if(s[1]==s[2]){
-    q = q[2:length(q)]
+#res = matrix("", length(countries)+1, length(countries)+1)
+ 
+map_base =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+map_other =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+
+
+for (base in c(1,2,3,5,6,8,9,10,11,12)){
+        plot_dat <- list()
+        base_countries= map_base[map_base==base]
+        other_countries= map_other[map_base==base]
+        if(length(base_countries)>0){
+          for(k in 1:length(base_countries)){
+            i = base_countries[k]
+            j = other_countries[k]
+            data <- data_list[[i]]
+            load(paste("dlnm_mod_directed_June12_",paste(countries[i], countries[j], sep="_"),".Rda", sep=""))
+            data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), NA)
+            data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated  <= 0), NA)
+            q <- c(0.25, 0.5, 0.75, 0.9)
+            s <- quantile(data$NG..SUN, 
+                          probs = q, na.rm = T)
+            s_dm <- summary(dlnm_mod_directed, pred.at = s, cenval = 0, verbose = FALSE)
+            plot_dat[[k]] <- rbindlist(lapply(1:length(q), function(i) {
+              data.table(base = countries[i],
+                         other = countries[j],
+                         quantile = q[i],
+                         solar = s[i],
+                         lag = 0:12,
+                         dlnm_est = s_dm$matfit[i,],
+                         cumulative_est = -s_dm$cumulative.effect[i, 2],
+                         cumulative_low = -s_dm$cumulative.effect[i, 3],
+                         cumulative_high = -s_dm$cumulative.effect[i, 4])
+            }))
+          }
+          
+          plot_dat_all <- rbindlist(plot_dat)
+          plot_dat_all$region_named <- 
+            factor(plot_dat_all$other, 
+                 labels = sort(name_countries[other_countries]))
+          # Lag plot
+        #ggplot(plot_dat_all[region %in% c("NW", "TEX")],
+        jpeg(paste(countries[base],"lag_solar.jpg", sep="_"))
+        p2<- ggplot(plot_dat_all,
+               aes(x = lag, y = dlnm_est, 
+                   color = factor(quantile), linetype = factor(quantile))) +
+          geom_line(size = 1) +
+          facet_wrap(~ region_named, scales = "free") +
+          theme_minimal(base_size = 12) +
+          theme(legend.position = "bottom", 
+                legend.key.width = unit(1, "cm"),
+                axis.line.x = element_line(color = "black"), 
+                axis.line.y = element_line(color = "black")) +
+          scale_x_continuous(expand = c(0, 0)) +
+          #scale_y_continuous(expand = c(0, 0)) +
+          scale_y_continuous(expand = c(0, 0), limits = c(0,820)) + #ylimit is set 
+          labs(x = TeX(r'(Lag $l$ in hours)'), y = TeX(r'($w_r(x,l)$ metric tons)'), 
+               color = paste(TeX(r'(Solar quantile x)'), name_countries[i], sep=""),
+               linetype = paste(TeX(r'(Solar quantile x)'), name_countries[i], sep=""))
+        
+        print(p2)
+        dev.off()
   }
+}
+```
+
+
+
+```{r}
+# Plot with diff levels of solar (quantiles across nonzero solar values)
+
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+#load("data_list_June12.Rda")
+for (j in 1:length(countries)){
+  q <- c(0.25, 0.5, 0.75, 0.9)
+  s <- quantile(data_list[[j]]$NG..SUN, 
+                c(0.25, 0.5, 0.75, 0.9), na.rm = T)
+  load(paste("dlnm_mod_June12_", countries[j], ".Rda", sep=""))
   s_dm <- summary(dm, pred.at = s, cenval = 0)
   plot_dat <- rbindlist(lapply(1:length(q), function(i) {
     data.table(quantile = q[i],
@@ -573,6 +934,7 @@ for (j in 1:length(countries)){
          aes(x = lag, y = dlnm_est, 
              color = factor(quantile), linetype = factor(quantile))) +
     geom_line(size = 1) +
+    facet_wrap(~ base, scales = "free") +
     theme_minimal(base_size = 16) +
     theme(legend.position = "bottom") +
     scale_x_continuous(expand = c(0, 0)) +

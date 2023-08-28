@@ -52,8 +52,8 @@ for (i in (1:length(countries))){
   #print(colnames(data))
   
   # Only consider data between during time period
-  start_date = "2018-06-01"
-  end_date = "2023-06-13"
+  start_date = "2018-07-01"
+  end_date = "2023-07-01"
   data <- data[data$date2 >= start_date & data$date2 < end_date, ]
   
   #convert negative solar values and zero CO2 emissions as NA. 
@@ -68,8 +68,8 @@ for (i in (1:length(countries))){
   # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
   # Complete data rows
 
-  data_list[[i]]<-data #Note: this data contain NA values
-  lag_data_list[[i]]<- lag_dat 
+  data_list[[i]]<-data #Note: this data may contain NA values
+  lag_data_list[[i]]<- lag_dat #Note: this data may contain NA values
   #lead_data_list[[i]]<-lead_dat
   complete_list[[i]] <- which(complete.cases(lag_dat) & 
                             complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
@@ -108,7 +108,7 @@ for (i in (1:length(countries))){
                                               )
   }))
   #dm<-dlnm_mod_list[[i]]
-  save(dm,file=paste("dlnm_mod_June12_",countries[i],".Rda",sep=""))
+  save(dm,file=paste("dlnm_mod_June30_",countries[i],".Rda",sep=""))
   #save(dlnm_mod_list,file="dlnm_mod_list.Rda")
 }
 
@@ -118,8 +118,8 @@ for (i in (1:length(countries))){
 ```{r}
 #linear model
 library(mgcv)
-m_linear <- lm(CO2~ SUN + ..., data) #or exposure.se = 10000
-m_smooth <- gam(formula + s(SUN), data)
+m_linear <- lm(CO2~ NG.SUN + ..., data[complete,]) #or exposure.se = 10000
+m_smooth <- gam(formula + s(SUN), data[complete,])
 AIC(m_smooth)
 AIC(m_linear)
 ```
@@ -335,6 +335,7 @@ run_analysis <- function(combo, base, other){
     lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
     #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
     #lag_dat <- cbind(lead_dat, lag_dat)
+    
     complete<- which(complete.cases(lag_dat) & 
                                 complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
     
@@ -410,8 +411,8 @@ generate_plots<- function(base, other, k){
 ```{r}
 #One country's CO2 reduction based on the "base" country
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-base_countries =c(5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)#c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
-other_countries =c(6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)#c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+base_countries =c(12)#c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+other_countries =c(3)#c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
 for (i in (1:length(base_countries))){
   {
     {
