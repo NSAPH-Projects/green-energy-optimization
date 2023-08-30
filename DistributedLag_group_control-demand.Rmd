@@ -57,7 +57,7 @@ for (i in (1:length(countries))){
   data <- data[data$date2 >= start_date & data$date2 < end_date, ]
   
   #convert negative solar values and zero CO2 emissions as NA. 
-  data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), NA)
+  data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), 0)
   data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated  <= 0), NA)
 
   # Create lagged data
@@ -241,8 +241,8 @@ year_wise_analysis <- function(country, start_date, end_date){
   
   
   # Create lagged data
-  lags <- 24
-  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:24, type = "lag")])
+  lags <- 12
+  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:12, type = "lag")])
   #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
   #lag_dat <- cbind(lead_dat, lag_dat)
   # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
@@ -337,7 +337,7 @@ run_analysis <- function(combo, base, other){
     #lag_dat <- cbind(lead_dat, lag_dat)
     
     complete<- which(complete.cases(lag_dat) & 
-                                complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
+                                complete.cases(data[, .(CO2.Emissions.Generated, demand, NG..SUN, NG..SUN.y)]))
     
     dlnm_mod_directed <- combine.models(lapply(1:5, function(j) {
                                     tdlnm(I(-1*CO2.Emissions.Generated) ~ ns(index, df = 24) + ns(index, df = 4)* ns(Hour, df = 5) + demand + NG..SUN.y,       
@@ -349,7 +349,7 @@ run_analysis <- function(combo, base, other){
                                                   time.split.prob = rep(c(10, 3), c(5, 8)))
       }))
     
-    save(dlnm_mod_directed,file=paste("dlnm_mod_directed_June12_",paste(base, other, sep="_"),".Rda", sep=""))
+    save(dlnm_mod_directed,file=paste("dlnm_mod_directed_June30_",paste(base, other, sep="_"),".Rda", sep=""))
 
 }
 ```
@@ -411,8 +411,8 @@ generate_plots<- function(base, other, k){
 ```{r}
 #One country's CO2 reduction based on the "base" country
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-base_countries =c(12)#c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
-other_countries =c(3)#c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+base_countries =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+other_countries =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
 for (i in (1:length(base_countries))){
   {
     {
