@@ -1,0 +1,208 @@
+---
+title: "Plots"
+author: "Arpita"
+date: "2023-07-15"
+output: html_document
+---
+
+```{r}
+library(data.table)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(sf)
+library(ggplot2)
+library(scico)
+library(dlmtree)
+library(plotrix)
+library(latex2exp)
+
+#library(patchwork) # To display 2 charts together
+#library(hrbrthemes)
+```
+
+```{r}
+countries <- c("CAL", "CAR", "CENT", "FlA", "MIDA", "MIDW", "NE", "NW",
+             "SE", "SW", "TEN", "TEX")
+start_date = "2018-07-01"
+end_date = "2023-07-01"
+
+get_data<- function(r, start_date= "2018-07-01", end_date="2023-07-01"){
+  cat(r, "")
+  data <- read_xlsx(paste0("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", r, ".xlsx"), guess_max = 70000)
+  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`NG: SUN`  < 0), 0)
+  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`CO2 Emissions Generated`  <= 0), NA)
+  data <- data[data$`Local date` >= start_date & data$`Local date` < end_date, ]
+  return (data)
+}
+```
+
+```{r}
+#Find the %solar in Texas during 2018 and 2023 (for the paper)
+d<- get_data("TEX", end_date="2019-07-01")
+d<- d[!is.na(d$`NG: SUN`),]
+print(100*sum(d$`NG: SUN`)/sum(d$`Sum (NG)`))
+
+d<- get_data("TEX", start_date="2022-07-01")
+d<- d[!is.na(d$`NG: SUN`),]
+print(100*sum(d$`NG: SUN`)/sum(d$`Sum (NG)`))
+
+```
+
+```{r}
+
+lags=12
+
+ext_name = ""
+lag_range=0
+
+if(lags==12){
+  ext_name = ""
+  lag_range=0:12
+}
+if(lags==23){
+  ext_name = "23hrs_"
+  lag_range=0:23
+}
+plot_dat <- list()
+create_est<- function(regions, solar_levels, delta=FALSE, ext_name="", lag_range=0:12){
+  for(r in regions){
+    data<- get_data(r)
+    baseSolar = mean(data$`NG: SUN`, na.rm=T)
+    solar_levels <- solar_levels[solar_levels + baseSolar < quantile(data$`NG: SUN`, 0.995, na.rm = T)]
+    load(paste("dlnm_mod_June30_f_",ext_name, r, ".Rda", sep=""))
+    s_dm <- 0
+    if(delta){
+      s_dm<- summary(dm, pred.at = (solar_levels+baseSolar), cenval = baseSolar, verbose = FALSE)
+    }
+    else{
+      s_dm<- summary(dm, pred.at = (solar_levels+baseSolar), cenval = 0, verbose = FALSE)
+    }
+    plot_dat[[r]] <- rbindlist(lapply(1:length(solar_levels), function(i) {
+      data.table(base = baseSolar,
+                 solar = solar_levels[i],
+                 lag = lag_range,
+                 dlnm_est = -s_dm$matfit[i,],
+                 cumulative_est = -s_dm$cumulative.effect[i, 2],
+                 cumulative_low = -s_dm$cumulative.effect[i, 3],
+                 cumulative_high = -s_dm$cumulative.effect[i, 4],
+                 region = r)
+    }))
+  }
+  return (plot_dat)
+}
+```
+
+```{r}
+levels = c(1000, 2000, 3000, 4000, 5000)
+plot_data <- create_est(regions = c("CAL"), solar_levels = levels, delta=FALSE)
+
+plot_dat_all <- rbindlist(plot_data)
+plot_dat_all$region_named <- 
+  factor(plot_dat_all$region, 
+         labels = c("California"))#, "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest", "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas"))
+
+#Plot for w_r() vs lags
+p_w_lag<- ggplot(plot_dat_all[region %in% c("CAL")],
+#ggplot(plot_dat_all,
+       aes(x = lag, y = dlnm_est, 
+           color = factor(solar), linetype = factor(solar))) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0, color = "black")+
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 24) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'(Lag $l$ in hours)'), y = TeX(r'($w_r(x_0^r + \epsilon, l)$ metric tons)'), 
+       color = TeX(r'(Solar increment $\epsilon$)'), fill = "", linetype = TeX(r'(Solar increment $\epsilon$)'))
+
+png(paste("CAL_w_", ext_name,".png", sep=""), width=800, height=500)
+print(p_w_lag)
+dev.off()
+
+#Plot for f_r() vs solar_increments
+p_f_x<- ggplot(plot_dat_all[region %in% c("CAL")],
+#ggplot(plot_dat_all,
+       aes(x = solar, y = cumulative_est, fill = factor(solar))) +
+  geom_bar(stat="identity") +
+  geom_col(width = 0.1) + 
+  #geom_text(aes(label=cumulative_est)) + 
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 24) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'(Solar increment $\epsilon$ MWh)'), y = TeX(r'($\sum_{l=0}^{12}w_r(x_0^r + \epsilon, l)$ metric tons)'), color="", fill="", linetype="")
+png(paste("CAL_f_", ext_name,".png", sep=""), width=800, height=500)
+print(p_f_x)
+dev.off()
+
+
+#-------------------Delta values-----------------------------------
+plot_data_delta <- create_est(regions = c("CAL"), solar_levels = levels, delta=TRUE)
+
+plot_dat_all_delta <- rbindlist(plot_data_delta)
+plot_dat_all_delta$region_named <- 
+  factor(plot_dat_all$region, 
+         labels = c("California"))#, "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest", "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas"))
+
+#Plot for \delta
+p_delta<- ggplot(plot_dat_all_delta[region %in% c("CAL") & lag==0],
+#ggplot(plot_dat_all[lag==0],
+          aes(x = solar, y = cumulative_est, 
+                         ymin = cumulative_low, max = cumulative_high)) +
+  geom_point(aes(x = 1, y = 0), size = 0) + # uniformly scale y-axis to include 0
+  geom_ribbon(fill = "grey") +
+  geom_line(size = 0.8) +
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 24) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0), limits = c(1000,5000)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(limits = c(0,22), expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'(Solar increment $\epsilon$ MWh)'),
+       y = TeX(r'($\hat{delta}_r(x_0^r +\epsilon, x_0^r)$ metric tons)'))+
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+  
+png(paste("CAL_deltasmall_", ext_name,".png", sep=""), width=800, height=500)
+print(p_delta)
+dev.off()
+  
+#Plot for \Delta
+p_Delta<- ggplot(plot_dat_all_delta[region %in% c("CAL") & lag==0],
+#ggplot(plot_dat_all[lag==0],
+          aes(x = solar, y = cumulative_est/solar, 
+                         ymin = cumulative_low/solar, ymax = cumulative_high/solar)) +
+  geom_point(aes(x = 1, y = 0), size = 0) + # uniformly scale y-axis to include 0
+  geom_ribbon(fill = "grey") +
+  geom_line(size = 0.8) +
+  facet_wrap(~ region_named, scales = "free") +
+  theme_minimal(base_size = 24) +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(1, "cm"),
+        axis.line.x = element_line(color = "black"), 
+        axis.line.y = element_line(color = "black")) +
+  scale_x_continuous(expand = c(0, 0), limits = c(1000,5000)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  #scale_y_continuous(limits = c(0,22), expand = c(0, 0)) + #ylimit is set 
+  labs(x = TeX(r'(Solar increment $\epsilon$ MWh)'),
+       y = TeX(r'($\hat{Delta}_r(x_0^r +\epsilon, x_0^r)$ metric tons)'))+
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+png(paste("CAL_Delta_", ext_name,".png", sep=""), width=800, height=500)
+print(p_Delta)
+dev.off()
+```
