@@ -8,5 +8,4 @@ Link the raw data
 
 ln -s /n/dominici_lab/lab/fossil_fuel_energy/data data
 
-main file for pairwise regional analysis: DistributedLag_group_control-demand.Rmd
-
+main file for pairwise regional analysis: DistributedLagModelGeneration.Rmd
