@@ -97,8 +97,9 @@ co2_offset <- rbindlist(lapply(0:23, function(h) {
                C_upper = -s$cilower[p,])
   }))
 }))
+```
 
-
+```{r}
 #Figure 2a (for California)
 p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
   geom_line(aes(x = Start, y = CO2_offset, 
@@ -107,7 +108,8 @@ p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
   geom_ribbon(data = co2_offset[Percent == x & Hour %in% c(12, 20)], 
               aes(x = Start, ymin = C_lower, ymax = C_upper, 
               fill = factor(Hour)), alpha=0.3, show.legend = FALSE) +
-             aes(x = Hour, y = V1, color = factor(Hour), size = 2) +
+  geom_point(data = co2_offset[Percent == x & Hour %in% c(12, 20), last(CO2_offset), by = Hour],
+             aes(x = Hour, y = V1, color = factor(Hour)), size = 2) +
   theme_minimal(base_size = 24) +
   theme(legend.position = "right",
         legend.key.height = unit(1.5, "cm"),
@@ -266,7 +268,7 @@ for (r in countries) {
 library(ggpubr)
 p3 <- ggarrange(plotlist = co2_plots, nrow = 4, ncol = 3, 
           common.legend = T, legend = "bottom")
-annotate_figure(fig, 
+annotate_figure(p3, 
                 left = text_grob(TeX("CO$_2$ change (metric tons)"), rot = 90, size = 16),
                 bottom = text_grob("Hour of day", size = 16))
 
