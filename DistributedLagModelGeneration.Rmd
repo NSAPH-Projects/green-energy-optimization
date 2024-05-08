@@ -1,0 +1,296 @@
+---
+title: "DistributedLag_group_control-demand"
+author: "Arpita"
+date: '2023-05-11'
+output: html_document
+---
+
+```{r}
+#install.packages("lubridate")
+library(data.table)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+#devtools::install_github("danielmork/dlmtree", ref="development")
+library(coda)
+library(ggplot2)
+library(ggpubr)
+library(dlmtree)
+library(splines)
+library(readxl)
+library(foreach)
+#vignette("nested")
+```
+
+```{r}
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+data_list <- list()
+lag_data_list <- list()
+lead_data_list <- list()
+complete_list <- list()
+for (i in (1:length(countries))){
+  print(countries[i])
+  data <- read_xlsx(paste("data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
+  #print(nrow(data))
+  setDT(data)
+  
+  # Use filters after the shifted solar data is created
+  #data <- data[!is.na(`NG: SUN`)]
+  #data <- data[!which(`NG: SUN`<0)]
+  #data <- data[which(`CO2 Emissions Generated`>0)]
+  
+  data[, date2 := as_date(`Local date`)]
+  data[, dow := wday(date2)]
+  data[, week := week(date2)]
+  data[, month := month(date2)]
+  data[, year := year(date2)]
+  data[, demand := `D`]
+  data[, index := 1:.N]
+  
+  # Make column names safe for use in formulas
+  setnames(data, make.names(names(data)))
+  #print(colnames(data))
+  
+  # Only consider data between during time period
+  start_date = "2018-07-01"
+  end_date = "2023-07-01"
+  data <- data[data$date2 >= start_date & data$date2 < end_date, ]
+  
+  #convert negative solar values and zero CO2 emissions as NA. 
+  data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), 0)
+  data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated <= 0), NA)
+
+  # Create lagged data
+  lags <- 12
+  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
+  #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
+  #lag_dat <- cbind(lead_dat, lag_dat)
+  # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
+  # Complete data rows
+
+  data_list[[i]]<-data #Note: this data may contain NA values
+  lag_data_list[[i]]<- lag_dat #Note: this data may contain NA values
+  #lead_data_list[[i]]<-lead_dat
+  complete_list[[i]] <- which(complete.cases(lag_dat) & 
+                            complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
+
+}
+```
+
+
+```{r}
+# Individual Nonlinear lagged model
+
+mlist <- lapply(countries, function(x) list())
+gr <- lapply(countries, function(x) list())
+names(mlist) <- countries
+names(gr) <- countries
+restarts <- 5
+
+
+# Iterate through regions, assess convergence, increase # trees
+for (i in 1:length(countries)) {
+  for (ntrees in c(20, 40, 80)) {
+    cat(countries[i], "ntrees =", ntrees, "\n")
+    data <- data_list[[i]]
+    complete <- complete_list[[i]]
+    lag_dat <- lag_data_list[[i]]
+    splits <- seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10) #5%and 95% percentile
+    
+    # Run monotone-TDLNM
+    model_run <-
+      foreach(m = 1:restarts,
+              .errorhandling = "remove",
+              .packages = c("dlmtree", "data.table", "splines"),
+              .export = c("data", "complete", "splits", "lag_dat", "g0", "s0"),
+              .verbose = F) %do%
+      {
+        set.seed(m)
+        tdlnm(I(-1*CO2.Emissions.Generated) ~
+                ns(index, df = 10) +
+                ns(Hour, df = 5) +
+                demand,
+              data[complete],
+              exposure.data = lag_dat[complete,],
+              exposure.splits = splits,
+              monotone = T, shrinkage = F, 
+              monotone.sigma = diag(lags + 1) * 2.701^2,
+              time.split.prob = lags:1,
+              n.trees = ntrees,
+              #n.burn=10000, n.iter=5000,
+              verbose = F)
+      }
+    
+    # Check convergence
+    s <- lapply(model_run, summary, cenval = median(data_list[[i]][NG..SUN>0, NG..SUN]),
+                mcmc = TRUE, verbose = FALSE)
+    mcmc_mtdlnm <- do.call(mcmc.list, lapply(1:length(model_run), function(i) {
+      d <- as.data.frame.table(s[[i]]$dlm_mcmc)
+      setDT(d)
+      mcmc(dcast(d, Var3 ~ Var1 + Var2, value.var = "Freq")[, Var3 := NULL][])
+    }))
+    gr_test <- gelman.diag(mcmc_mtdlnm, transform = F, autoburnin = F, multivariate = F)
+    cat(" GR =", median(gr_test$psrf[, 1]), "\n")
+    
+    if (is.null(gr[[countries[i]]]$psrf) || (median(gr_test$psrf[, 1]) < median(gr[[countries[i]]]$psrf[, 1]))) {
+      mlist[[countries[i]]] <- model_run
+      gr[[countries[i]]] <- gr_test
+    }
+  }
+  dm_mlist<- mlist[[countries[i]]]
+  save(dm_mlist, file=paste("tdlm_models/mlist_",countries[i],".Rda",sep=""))
+  dm<- combine.models(mlist[[countries[i]]])
+  save(dm, file=paste("tdlm_models/dm_mod_",countries[i],".Rda",sep=""))
+  ntrees_best <- gr[[countries[i]]]
+  save(ntrees_best, file=paste("tdlm_models/gr_",countries[i],".Rda",sep=""))
+}
+```
+
+
+```{r}
+# Individual Nonlinear lagged model for neighboring effect analysis
+
+#One country's CO2 reduction based on the "base" country
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+base_countries =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
+other_countries =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+
+combo_list<-list()
+for (i in (1:length(base_countries))){
+    base_country <- countries[base_countries[i]]
+    other_country <- countries[other_countries[i]]
+    combo_list<- append(combo_list, paste(base_country, other_country, sep="-"))
+}
+combo_list<- unlist(combo_list)
+
+mlist <- lapply(combo_list, function(x) list())
+gr <- lapply(combo_list, function(x) list())
+names(mlist) <- combo_list
+names(gr) <- combo_list
+restarts <- 5
+```
+
+```{r}
+run_analysis <- function(combo, base, other, i){
+    print(paste("base=",base, ", other=", other, sep=""))
+    data <- combo
+    setDT(data)
+    #print(colnames(data))
+    #data <- data[!is.na(`NG: SUN`)]
+    #print(nrow(data))
+    #data <- data[!which(`NG: SUN`<0)]
+    #print(nrow(data))
+    #data <- data[which(`CO2 Emissions Generated`>=0)]
+    #print(nrow(data))
+
+    data[, date2 := as_date(`Local.date`)]
+    data[, dow := wday(date2)]
+    data[, week := week(date2)]
+    data[, month := month(date2)]
+    data[, year := year(date2)]
+    data[, demand := `D`]
+    data[, index := 1:.N]
+    
+    # Make column names safe for use in formulas
+    setnames(data, make.names(names(data)))
+    #print(colnames(data))
+    
+    
+    # Create lagged data
+    lags <- 12
+    lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
+    #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
+    #lag_dat <- cbind(lead_dat, lag_dat)
+    
+    complete<- which(complete.cases(lag_dat) & 
+                                complete.cases(data[, .(CO2.Emissions.Generated, demand, NG..SUN, NG..SUN.y)]))
+    
+    
+    for (ntrees in c(20)) {
+    cat(combo_list[i], "ntrees =", ntrees, "\n")
+    splits <- seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10) #5%and 95% percentile
+    
+    # Run monotone-TDLNM
+    model_run <-
+      foreach(m = 1:restarts,
+              .errorhandling = "remove",
+              .packages = c("dlmtree", "data.table", "splines"),
+              .export = c("data", "complete", "splits", "lag_dat", "g0", "s0"),
+              .verbose = F) %do%
+      {
+        set.seed(m)
+        tdlnm(I(-1*CO2.Emissions.Generated) ~
+                ns(index, df = 10) +
+                ns(Hour, df = 5) +
+                demand,
+              data[complete],
+              exposure.data = lag_dat[complete,],
+              exposure.splits = splits,
+              monotone = T, shrinkage = F, 
+              monotone.sigma = diag(lags + 1) * 2.701^2,
+              time.split.prob = lags:1,
+              n.trees = ntrees,
+              #n.burn=10000, n.iter=5000,
+              verbose = F)
+      }
+    
+    # Check convergence
+    s <- lapply(model_run, summary, cenval = median(data[NG..SUN>0, NG..SUN]),
+                mcmc = TRUE, verbose = FALSE)
+    mcmc_mtdlnm <- do.call(mcmc.list, lapply(1:length(model_run), function(i) {
+      d <- as.data.frame.table(s[[i]]$dlm_mcmc)
+      setDT(d)
+      mcmc(dcast(d, Var3 ~ Var1 + Var2, value.var = "Freq")[, Var3 := NULL][])
+    }))
+    gr_test <- gelman.diag(mcmc_mtdlnm, transform = F, autoburnin = F, multivariate = F)
+    cat(" GR =", median(gr_test$psrf[, 1]), "\n")
+    
+    if (is.null(gr[[combo_list[i]]]$psrf) || (median(gr_test$psrf[, 1]) < median(gr[[combo_list[i]]]$psrf[, 1]))) {
+      mlist[[combo_list[i]]] <- model_run
+      gr[[combo_list[i]]] <- gr_test
+    }
+  }
+  dm_mlist<- mlist[[combo_list[i]]]
+  save(dm_mlist, file=paste("tdlm_models/mlist_",combo_list[i],".Rda",sep=""))
+  dm<- combine.models(mlist[[combo_list[i]]])
+  save(dm, file=paste("tdlm_models/dm_mod_",combo_list[i],".Rda",sep=""))
+  ntrees_best <- gr[[combo_list[i]]]
+  save(ntrees_best, file=paste("tdlm_models/gr_",combo_list[i],".Rda",sep=""))
+}
+```
+
+```{r}
+for (i in (1:length(combo_list))){
+  {
+    {
+    
+      base_country <- countries[base_countries[i]]
+      other_country <- countries[other_countries[i]]
+      
+      print(combo_list[i])
+      
+      #Load data of base_country
+      d<- data_list[[base_countries[i]]]
+      
+      #Only keep the desired number of columns
+      d <- d[, c("UTC.time", "NG..SUN")]
+      
+      #Create one merged file
+      d<-merge(d, data_list[[other_countries[i]]], by=c("UTC.time"))
+      print(colnames(d))
+      #d$D<- d$D.y
+      d$NG..SUN<- d$NG..SUN.x 
+      #d$CO2.Emissions.Generated <- d$CO2.Emissions.Generated.y
+      d <- d[, c("Local.date", "Hour", "D", "NG..SUN", "NG..SUN.y", "CO2.Emissions.Generated")]
+      
+      #Run analysis
+      run_analysis(combo = d, base = base_country, other = other_country, i=i)
+    }
+  }
+  
+}
+
+
