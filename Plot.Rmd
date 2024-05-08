@@ -29,11 +29,14 @@ end_date = "2023-07-01"
 #Preprocess data for every region
 get_data<- function(r, start_date= "2018-07-01", end_date="2023-07-01"){
   cat(r, "")
-  data <- read_xlsx(paste0("/n/dominici_lab/lab/fossil_fuel_energy/data/energy/Region_", r, ".xlsx"), guess_max = 70000)
+  data <- read_xlsx(paste0("data/Region_", r, ".xlsx"), guess_max = 70000)
   data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`NG: SUN`  < 0), 0)
   data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`CO2 Emissions Generated`  <= 0), NA)
   data <- data[data$`Local date` >= start_date & data$`Local date` < end_date, ]
   return (data)
+}
+if (!file.exists("output")){
+    dir.create("output")
 }
 ```
   
@@ -45,7 +48,7 @@ library(lubridate)
 library(ggplot2)
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 
                'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-solar_cap <- fread("solar_capacity_factor.csv")
+solar_cap <- fread("data/solar_capacity_factor.csv")
 # Change hour to 0-23 for wraparound
 solar_cap[, Hour := Hour %% 24]
 # Rename Florida region in capacity file
@@ -70,7 +73,7 @@ y <- "2022"
 # Get solar capacity and hourly median for year 2022
 hr_cap <- solar_cap[Region == r & year == y]
 # Load DLNM model
-load(paste0("/n/dominici_lab/lab/fossil_fuel_energy/region-models/mlist_", r, ".Rda"))
+load(paste0("tdlm_models/mlist_", r, ".Rda"))
 d <- combine.models(dm_mlist)
 # Loop over hours and calculate CO2 offset for increased solar by x%
 perc_increase <- c(x)
@@ -104,8 +107,7 @@ p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
   geom_ribbon(data = co2_offset[Percent == x & Hour %in% c(12, 20)], 
               aes(x = Start, ymin = C_lower, ymax = C_upper, 
               fill = factor(Hour)), alpha=0.3, show.legend = FALSE) +
-  geom_point(data = co2_offset[Percent == x & Hour %in% c(12, 20), last(CO2_offset), by = Hour],
-             aes(x = Hour, y = V1, color = factor(Hour)), size = 2) +
+             aes(x = Hour, y = V1, color = factor(Hour), size = 2) +
   theme_minimal(base_size = 24) +
   theme(legend.position = "right",
         legend.key.height = unit(1.5, "cm"),
@@ -120,7 +122,7 @@ p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
        color = "Observation\nhour",
        title = "")
 
-  png(paste(r, "_hourly_together.png", sep=""), width=800, height=400)
+  png(paste("output/", r, "_hourly_together.png", sep=""), width=800, height=400)
   print(p2a)
   dev.off() 
 ```
@@ -132,7 +134,7 @@ for (r in "CAL") {
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == 2022]
   # Load DLNM model
-  load(paste0("mlist_", r, ".Rda"))
+  load(paste0("tdlm_models/mlist_", r, ".Rda"))
   d <- combine.models(dm_mlist)
   # Loop over hours and calculate CO2 offset for increased solar by x%
   co2_offset_ci[[r]] <- rbindlist(lapply(0:23, function(h) {
@@ -186,7 +188,7 @@ p2b<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, 
 
 
 #png(paste(r, "_cumulative.png", sep=""), width=1000, height=800)
-png(paste(r, "_cumulative.png", sep=""), width=800, height=400)
+png(paste("output/", r, "_cumulative.png", sep=""), width=800, height=400)
 print(p2b)
 dev.off()
 ```
@@ -203,7 +205,7 @@ for (r in countries) {
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == y]
   # Load DLNM model
-  load(paste0("mlist_", r, ".Rda"))
+  load(paste0("tdlm_models/mlist_", r, ".Rda"))
   d <- combine.models(dm_mlist)
   # Loop over hours and calculate CO2 offset for increased solar by x%
   co2_offset_comb[[r]] <- rbindlist(lapply(0:23, function(h) {
@@ -262,15 +264,15 @@ for (r in countries) {
          #linetype = "Solar capacity increase")
 }
 library(ggpubr)
-fig <- ggarrange(plotlist = co2_plots, nrow = 4, ncol = 3, 
+p3 <- ggarrange(plotlist = co2_plots, nrow = 4, ncol = 3, 
           common.legend = T, legend = "bottom")
 annotate_figure(fig, 
                 left = text_grob(TeX("CO$_2$ change (metric tons)"), rot = 90, size = 16),
                 bottom = text_grob("Hour of day", size = 16))
 
 
-png(paste("cumulative_combined.png", sep=""), width=1000, height=1000)
-print(fig)
+png(paste("output/cumulative_combined.png", sep=""), width=1000, height=1000)
+print(p3)
 dev.off()
 ```
 
@@ -283,7 +285,7 @@ for (r in countries) {
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == y]
   # Load DLNM model
-  load(paste0("mlist_", r, ".Rda"))
+  load(paste0("tdlm_models/mlist_", r, ".Rda"))
   d <- combine.models(dm_mlist)
 
   # Loop over hours and calculate CO2 offset for increased solar by x%
@@ -314,7 +316,7 @@ for(r1 in countries){
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r1 & year == y]
   # Load DLNM model
-  load(paste0("mlist_", r1, ".Rda"))
+  load(paste0("tdlm_models/mlist_", r1, ".Rda"))
   d <- combine.models(dm_mlist)
   effect =0
   for(h in 0:23){
@@ -326,7 +328,7 @@ for(r1 in countries){
           all_results = rbind(all_results, c(r1, r1, h, as.numeric(mean[1]), as.numeric(mean[2]), as.numeric(mean[3]), as.numeric(mean[4])))
          }
   for(r2 in countries){
-      f <- paste0("mlist_",r2,"-",r1,".Rda")
+      f <- paste0("tdlm_models/mlist_",r2,"-",r1,".Rda")
       if (file.exists(f)){
         print(f)
         load(f)
@@ -347,7 +349,7 @@ for(r1 in countries){
 all_results = as.data.frame(all_results)
 colnames(all_results) = all_results[1,]
 all_results = all_results[-1,]
-write.csv(all_results, "all_results.csv")
+write.csv(all_results, "output/all_results.csv")
 
 # For Figure 4
 
@@ -367,7 +369,7 @@ p_daily<-  ggplot(data=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent
   labs(x = "Solar increase (in %)",
        y = TeX("Change in CO$_2$ (in metric tons)"))
 
-png(paste("daily.png", sep=""), width=800, height=600)
+png(paste("output/daily.png", sep=""), width=800, height=600)
 print(p_daily)
 dev.off()
 ```
@@ -414,7 +416,7 @@ p_interregional<- ggplot(daily_co2) +
   coord_equal() +
   labs(x = "Generating Region", y = "Import Region",
        fill = TeX("Import region CO$_{2}$ change"))
-png(paste("interregional.png", sep=""), width=1000, height=1000)
+png(paste("output/interregional.png", sep=""), width=1000, height=1000)
 print(p_interregional)
 dev.off()
 
@@ -433,7 +435,7 @@ long_df = values_df %>% pivot_longer(cols=colnames(values_df),
                     values_to='co2_offset')
 long_df$percent = sort(rep(perc_increase*100, 12))
 long_df=as.data.frame(long_df)
-write.csv(long_df, "total_effect.csv")
+write.csv(long_df, "output/total_effect.csv")
 
 # Stacked plot
 p_total<- ggplot(data=long_df, aes(fill=Regions, y=co2_offset, x=percent)) + 
@@ -441,7 +443,7 @@ p_total<- ggplot(data=long_df, aes(fill=Regions, y=co2_offset, x=percent)) +
     geom_hline(yintercept=617) +
     theme_minimal(base_size = 24) +
     labs(x = "Increase in Solar (in percentage)", y = TeX("Change in CO$_2$ (in metric tons)"), color = "Regions")+ coord_flip()
-png(paste("total.png", sep=""), width=1000, height=500)
+png(paste("output/total.png", sep=""), width=1000, height=500)
 print(p_total)
 dev.off()
 
