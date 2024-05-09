@@ -1,0 +1,55 @@
+---
+title: "PreprocessingData"
+author: "Arpita"
+date: '2023-05-11'
+output: html_document
+---
+  
+```{r}
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(readxl)
+```
+
+```{r}
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+for (i in (1:length(countries))){
+  print(paste("Fetching xlsx data for region: ", countries[i], sep=""))
+  # Download the file from the URL
+  download.file(paste("https://www.eia.gov/electricity/gridmonitor/knownissues/xls/Region_",countries[i],".xlsx", sep=""), paste("data/Region_",countries[i],".xlsx", sep=""), mode = "wb")
+  
+  # Read the Excel file into R
+  data <- read_xlsx(paste("data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
+
+  # Once you're done, you may want to delete the downloaded file
+  file.remove(paste("data/Region_",countries[i],".xlsx", sep=""))
+
+  #print(nrow(data))
+  setDT(data)
+
+  data[, date2 := as_date(`Local date`)]
+  data[, dow := wday(date2)]
+  data[, week := week(date2)]
+  data[, month := month(date2)]
+  data[, year := year(date2)]
+  data[, demand := `D`]
+  data[, index := 1:.N]
+  
+  # Make column names safe for use in formulas
+  setnames(data, make.names(names(data)))
+  #print(colnames(data))
+  
+  # Only consider data between during the 5 year time period
+  start_date = "2018-07-01"
+  end_date = "2023-07-01"
+  data <- data[data$date2 >= start_date & data$date2 < end_date, ]
+  
+  #convert negative solar values and zehead(dataro CO2 emissions as NA. 
+  data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), 0)
+  data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated <= 0), NA)
+
+  #Save data
+  write.csv(data, paste("data/",countries[i],".csv", sep=""), row.names = FALSE)
+}
+```
