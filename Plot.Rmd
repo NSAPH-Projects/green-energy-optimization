@@ -73,8 +73,10 @@ y <- "2022"
 # Get solar capacity and hourly median for year 2022
 hr_cap <- solar_cap[Region == r & year == y]
 # Load DLNM model
-load(paste0("tdlm_models/mlist_", r, ".Rda"))
-d <- combine.models(dm_mlist)
+#load(paste0("tdlm_models/mlist_", r, ".Rda"))
+#d <- combine.models(dm_mlist)
+load(paste0("tdlm_models/dm_mod_", r, ".Rda"))
+d<- dm
 # Loop over hours and calculate CO2 offset for increased solar by x%
 perc_increase <- c(x)
 co2_offset <- rbindlist(lapply(0:23, function(h) {
@@ -136,8 +138,10 @@ for (r in "CAL") {
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == 2022]
   # Load DLNM model
-  load(paste0("tdlm_models/mlist_", r, ".Rda"))
-  d <- combine.models(dm_mlist)
+  #load(paste0("tdlm_models/mlist_", r, ".Rda"))
+  #d <- combine.models(dm_mlist)
+  load(paste0("tdlm_models/dm_mod_", r, ".Rda"))
+  d<- dm
   # Loop over hours and calculate CO2 offset for increased solar by x%
   co2_offset_ci[[r]] <- rbindlist(lapply(0:23, function(h) {
     m <- hr_cap[Hour == h, solar_median_mwh]
@@ -207,8 +211,10 @@ for (r in countries) {
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == y]
   # Load DLNM model
-  load(paste0("tdlm_models/mlist_", r, ".Rda"))
-  d <- combine.models(dm_mlist)
+  #load(paste0("tdlm_models/mlist_", r, ".Rda"))
+  #d <- combine.models(dm_mlist)
+  load(paste0("tdlm_models/dm_mod_", r, ".Rda"))
+  d<- dm
   # Loop over hours and calculate CO2 offset for increased solar by x%
   co2_offset_comb[[r]] <- rbindlist(lapply(0:23, function(h) {
     m <- hr_cap[Hour == h, solar_median_mwh]
@@ -287,9 +293,10 @@ for (r in countries) {
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == y]
   # Load DLNM model
-  load(paste0("tdlm_models/mlist_", r, ".Rda"))
-  d <- combine.models(dm_mlist)
-
+  #load(paste0("tdlm_models/mlist_", r, ".Rda"))
+  #d <- combine.models(dm_mlist)
+  load(paste0("tdlm_models/dm_mod_", r, ".Rda"))
+  d<- dm
   # Loop over hours and calculate CO2 offset for increased solar by x%
   co2_offset_comb[[r]] <- rbindlist(lapply(0:23, function(h) {
     m <- hr_cap[Hour == h, solar_median_mwh]
@@ -318,8 +325,10 @@ for(r1 in countries){
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r1 & year == y]
   # Load DLNM model
-  load(paste0("tdlm_models/mlist_", r1, ".Rda"))
-  d <- combine.models(dm_mlist)
+  #load(paste0("tdlm_models/mlist_", r1, ".Rda"))
+  #d <- combine.models(dm_mlist)
+  load(paste0("tdlm_models/dm_mod_", r1, ".Rda"))
+  d<- dm
   effect =0
   for(h in 0:23){
           m <- hr_cap[Hour == h, solar_median_mwh]
@@ -330,14 +339,16 @@ for(r1 in countries){
           all_results = rbind(all_results, c(r1, r1, h, as.numeric(mean[1]), as.numeric(mean[2]), as.numeric(mean[3]), as.numeric(mean[4])))
          }
   for(r2 in countries){
-      f <- paste0("tdlm_models/mlist_",r2,"-",r1,".Rda")
+      #f <- paste0("tdlm_models/mlist_",r2,"-",r1,".Rda")
+      f<- (paste0("tdlm_models/dm_mod_", r2, "-", r1, ".Rda"))
       if (file.exists(f)){
         print(f)
         load(f)
         hr_cap <- solar_cap[Region == r2 & year == y]
         for(h in 0:23){
           m <- hr_cap[Hour == h, solar_median_mwh]
-          d <- combine.models(dm_mlist)
+          #d <- combine.models(dm_mlist)
+          d<- dm
           s <- summary(d, cenval = m,
                    pred.at = m * (1 + perc_increase), verbose = F)
           mean=s$cumulative.effect$mean
