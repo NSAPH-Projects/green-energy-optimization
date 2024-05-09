@@ -1,4 +1,4 @@
-# Quantifying Effects of Solar Power Adoption on CO_2 Emissions Reduction
+# Quantifying Effects of Solar Power Adoption on CO$_2$ Emissions Reduction
 
 A data-driven approach to estimate the immediate and time-lagged effects of an hourly increase in solar power generation on carbon dioxide (CO$_2$) emissions reduction within the same geographic region and neighboring regions.
 
