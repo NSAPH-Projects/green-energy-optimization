@@ -14,6 +14,9 @@ library(readxl)
 
 ```{r}
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+if (!file.exists("data")){
+    dir.create("data")
+}
 for (i in (1:length(countries))){
   print(paste("Fetching xlsx data for region: ", countries[i], sep=""))
   # Download the file from the URL

@@ -1,11 +1,21 @@
-# Quantifying Effects of Solar Power Adoption on CO2 Emissions Reduction
+# Quantifying Effects of Solar Power Adoption on CO~2~ Emissions Reduction
 
-A data-driven approach to estimate the immediate and time-lagged effects of increase in solar power generation on CO2 emissions reduction within the same geographic region and neighboring regions
+A data-driven approach to estimate the immediate and time-lagged effects of an hourly increase in solar power generation on carbon dioxide (CO~2~) emissions reduction within the same geographic region and neighboring regions.
 
-## Internal
+## Data
 
-Link the raw data
+The datasets and more details about the data are available in [Dataverse](https://doi.org/10.7910/DVN/OKEATQ).
 
-ln -s /n/dominici_lab/lab/fossil_fuel_energy/data data
+Download the files and store them in a folder `data` within the working directory.
 
-main file for pairwise regional analysis: DistributedLagModelGeneration.Rmd ![Daily effect](../output/daily.png)
+## Description of the files
+
+1.  `PreprocessingData.Rmd` contains the script that had been used for preprocessing the data.
+2.  `DistributedLagModelGeneration.Rmd` contains the script to generate the models aiding the estimations. It creates a folder called `tdlm_models` within the current working directory to store the generated models. Due to the complexity of the computations involved, executing this file may take several days.
+3.  `Plot.Rmd` contains the script to generate the figures and tables. It creates a folder called `output` in the current working directory and stores all the results.
+
+## Main Result
+
+Combining the regional and interregional analyses, a substantial reduction of 633 million metric tons of CO~2~ emissions is found to be associated with a 15% increase in solar power generation across the US electricity sector over the next two decades.
+
+![**Figure**: The estimated change in CO~2~ emissions (x-axis) in each region (colors) over the next two decades, associated with increased solar generation at every hour of the day within each region and also in the neighboring regions. Each horizontal bar corresponds to a specific percentage increase in solar generation (5%, 10%, 15%, and 20%). Within each horizontal bar, the colored segments represent the estimated CO~2~ reductions in different U.S. regions (such as California, Carolinas, Central, etc.). The black vertical line shows the target CO~2~ reduction value of 617 million metric tons.](output/total.png)

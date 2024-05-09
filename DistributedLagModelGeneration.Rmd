@@ -27,6 +27,9 @@ library(foreach)
 
 ```{r}
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+if (!file.exists("tdlm_models")){
+    dir.create("tdlm_models")
+}
 data_list <- list()
 lag_data_list <- list()
 lead_data_list <- list()
