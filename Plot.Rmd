@@ -243,27 +243,13 @@ solar_increase = as.data.frame(solar_increase)
 rownames(solar_increase) = countries
 colnames(solar_increase) = c(0.05, 0.1, 0.15,0.2)
 
-#         0.05      0.1     0.15      0.2
-#CAL  2126.782 4253.564 6380.346 8507.128
-#CAR   486.545   973.09 1459.635  1946.18
-#CENT  24.8565   49.713  74.5695   99.426
-#FlA   561.881 1123.762 1685.643 2247.524
-#MIDA 361.8428 723.6855 1085.528 1447.371
-#MIDW  223.161  446.322  669.483  892.644
-#NE    46.4645   92.929 139.3935  185.858
-#NW    731.971 1463.942 2195.913 2927.884
-#SE   409.4753 818.9505 1228.426 1637.901
-#SW   256.9053 513.8105 770.7157 1027.621
-#TEN  68.92113 137.8423 206.7634 275.6845
-#TEX  1214.848 2429.696 3644.543 4859.391
 
 solar_increase[] <- lapply(solar_increase, function(x) as.numeric(as.character(x)))
 column_sums = colSums(solar_increase)
 
 # Print the column sums
 print(column_sums)
-#     0.05       0.1      0.15       0.2 
-# 6513.653 13027.306 19540.959 26054.612 
+
 
 # Combined plots
 co2_plots <- list()
