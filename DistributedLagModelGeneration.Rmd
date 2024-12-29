@@ -27,16 +27,14 @@ library(foreach)
 
 ```{r}
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-if (!file.exists("tdlm_models")){
-    dir.create("tdlm_models")
-}
+
 data_list <- list()
 lag_data_list <- list()
 lead_data_list <- list()
 complete_list <- list()
 for (i in (1:length(countries))){
   print(countries[i])
-  data <- read_xlsx(paste("data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
+  data <- read_xlsx(paste("../data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
   #print(nrow(data))
   setDT(data)
   
@@ -68,6 +66,10 @@ for (i in (1:length(countries))){
 
   # Create lagged data
   lags <- 12
+  if (!file.exists(paste0("tdlm_models_lag",lags))){
+    dir.create(paste0("tdlm_models_lag",lags))
+  }
+  models_filename = paste0("tdlm_models_lag",lags)
   lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
   #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
   #lag_dat <- cbind(lead_dat, lag_dat)
@@ -114,7 +116,7 @@ for (i in 1:length(countries)) {
         set.seed(m)
         tdlnm(I(-1*CO2.Emissions.Generated) ~
                 ns(index, df = 10) +
-                ns(Hour, df = 5) +
+                ns(Hour, df = 5) +40.8*
                 demand,
               data[complete],
               exposure.data = lag_dat[complete,],
@@ -144,11 +146,11 @@ for (i in 1:length(countries)) {
     }
   }
   dm_mlist<- mlist[[countries[i]]]
-  save(dm_mlist, file=paste("tdlm_models/mlist_",countries[i],".Rda",sep=""))
+  save(dm_mlist, file=paste(models_filename,"/mlist_",countries[i],".Rda",sep=""))
   dm<- combine.models(mlist[[countries[i]]])
-  save(dm, file=paste("tdlm_models/dm_mod_",countries[i],".Rda",sep=""))
+  save(dm, file=paste(models_filename,"/dm_mod_",countries[i],".Rda",sep=""))
   ntrees_best <- gr[[countries[i]]]
-  save(ntrees_best, file=paste("tdlm_models/gr_",countries[i],".Rda",sep=""))
+  save(ntrees_best, file=paste(models_filename,"/gr_",countries[i],".Rda",sep=""))
 }
 ```
 
@@ -177,6 +179,9 @@ restarts <- 5
 ```
 
 ```{r}
+
+lags <- 4
+models_filename = paste0("tdlm_models_lag",lags)
 run_analysis <- function(combo, base, other, i){
     print(paste("base=",base, ", other=", other, sep=""))
     data <- combo
@@ -203,7 +208,6 @@ run_analysis <- function(combo, base, other, i){
     
     
     # Create lagged data
-    lags <- 12
     lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
     #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
     #lag_dat <- cbind(lead_dat, lag_dat)
@@ -257,11 +261,11 @@ run_analysis <- function(combo, base, other, i){
     }
   }
   dm_mlist<- mlist[[combo_list[i]]]
-  save(dm_mlist, file=paste("tdlm_models/mlist_",combo_list[i],".Rda",sep=""))
+  save(dm_mlist, file=paste(models_filename,"/mlist_",combo_list[i],".Rda",sep=""))
   dm<- combine.models(mlist[[combo_list[i]]])
-  save(dm, file=paste("tdlm_models/dm_mod_",combo_list[i],".Rda",sep=""))
+  save(dm, file=paste(models_filename,"/dm_mod_",combo_list[i],".Rda",sep=""))
   ntrees_best <- gr[[combo_list[i]]]
-  save(ntrees_best, file=paste("tdlm_models/gr_",combo_list[i],".Rda",sep=""))
+  save(ntrees_best, file=paste(models_filename,"/gr_",combo_list[i],".Rda",sep=""))
 }
 ```
 
