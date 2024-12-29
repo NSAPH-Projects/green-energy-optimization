@@ -67,7 +67,7 @@ hr_cap <- solar_cap[Region == r & year == y]
 #load(paste0("tdlm_models/mlist_", r, ".Rda"))
 #d <- combine.models(dm_mlist)
 lags=12
-models_filename = paste0("tdlm_models_lag",lags)
+models_filename = "tdlm_models"
 load(paste0(models_filename,"/dm_mod_", r, ".Rda"))
 d<- dm
 # Loop over hours and calculate CO2 offset for increased solar by x%
@@ -119,7 +119,7 @@ p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
        color = "Observation\nhour",
        title = "")
 
-  png(paste("output/", r, "_lag", lags, "_hourly_together.png", sep=""), width=800, height=400)
+  png(paste("output/", r, "_hourly_together.png", sep=""), width=800, height=400)
   print(p2a)
   dev.off() 
 ```
@@ -187,7 +187,7 @@ p2b<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, 
 
 
 #png(paste(r, "_cumulative.png", sep=""), width=1000, height=800)
-png(paste("output/", r, "_lag", lags, "_cumulative.png", sep=""), width=800, height=400)
+png(paste("output/", r, "_cumulative.png", sep=""), width=800, height=400)
 print(p2b)
 dev.off()
 ```
@@ -315,7 +315,7 @@ annotated_plot <- annotate_figure(
   )
 )
 
-png(paste("output/lags", lags, "_cumulative_combined.png", sep=""), width=1000, height=1000)
+png(paste("output/cumulative_combined.png", sep=""), width=1000, height=1000)
 print(annotated_plot)
 dev.off()
 ```
@@ -363,7 +363,7 @@ for(r1 in countries){
   # Load DLNM model
   #load(paste0("tdlm_models/mlist_", r1, ".Rda"))
   #d <- combine.models(dm_mlist)
-  load(paste0("tdlm_models/dm_mod_", r1, ".Rda"))
+  load(paste0(models_filename, "/dm_mod_", r1, ".Rda"))
   d<- dm
   effect =0
   for(h in 0:23){
@@ -376,7 +376,7 @@ for(r1 in countries){
          }
   for(r2 in countries){
       #f <- paste0("tdlm_models/mlist_",r2,"-",r1,".Rda")
-      f<- (paste0("tdlm_models/dm_mod_", r2, "-", r1, ".Rda"))
+      f<- (paste0(models_filename, "/dm_mod_", r2, "-", r1, ".Rda"))
       if (file.exists(f)){
         print(f)
         load(f)
@@ -398,7 +398,7 @@ for(r1 in countries){
 all_results = as.data.frame(all_results)
 colnames(all_results) = all_results[1,]
 all_results = all_results[-1,]
-write.csv(all_results, "output/lags",lag, "_all_results.csv")
+write.csv(all_results, "output/all_results.csv")
 
 # For Figure 4
 
@@ -418,7 +418,7 @@ p_daily<-  ggplot(data=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent
   labs(x = "Solar increase (in %)",
        y = TeX("Change in CO$_2$ (in metric tons)"))
 
-png(paste("output/lags", lag, "_daily.png", sep=""), width=800, height=600)
+png(paste("output/daily.png", sep=""), width=800, height=600)
 print(p_daily)
 dev.off()
 ```
