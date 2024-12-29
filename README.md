@@ -10,7 +10,7 @@ Download the files and store them in a folder `data` within the working director
 
 ## Description of the files
 
-1.  `PreprocessingData.Rmd` contains the data preprocessing.
+1.  `PreprocessingData.Rmd` contains the data preprocessing steps and stores the clean datasets for each region in separate .csv files within a folder called "data".
 2.  `DistributedLagModelGeneration.Rmd` contains the script to generate the models aiding the estimations. It creates a folder called `tdlm_models` within the current working directory to store the generated models. Due to the complexity of the computations, executing this file may take several days.
 3.  `Plot.Rmd` contains the script to generate the figures and tables. It creates a folder called `output` in the current working directory and stores all the results.
 
