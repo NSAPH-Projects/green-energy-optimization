@@ -26,7 +26,7 @@ for (i in (1:length(countries))){
   data <- read_xlsx(paste("data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
 
   # Once you're done, you may want to delete the downloaded file
-  file.remove(paste("data/Region_",countries[i],".xlsx", sep=""))
+  #file.remove(paste("data/Region_",countries[i],".xlsx", sep=""))
 
   #print(nrow(data))
   setDT(data)

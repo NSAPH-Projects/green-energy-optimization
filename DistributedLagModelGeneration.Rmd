@@ -135,8 +135,8 @@ for (i in 1:length(countries)) {
 
 #One country's CO2 reduction based on the "base" country
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-base_countries =c(1,1,2,2,3,3,3,3,5,5,5,6,6,8,8,9,9,9,9,10,11,11,11,12)
-other_countries =c(10,8,5,9,6,8,10,12,2,6,11,9,11,1,10,2,4,6,11,1,2,5,9,3)
+base_countries =c(1,1,2,3,3,3,3,5,5,5,6,8,9,9,9,10,11,11,11,12)
+other_countries =c(10,8,5,6,8,10,12,2,6,11,9,1,4,6,11,1,2,5,9,3)
 
 combo_list<-list()
 for (i in (1:length(base_countries))){
@@ -190,7 +190,7 @@ run_analysis <- function(combo, base, other, i){
                                 complete.cases(data[, .(CO2.Emissions.Generated, demand, NG..SUN, NG..SUN.y)]))
     
     
-    for (ntrees in c(20)) {
+    for (ntrees in c(20, 40, 80)) {
     cat(combo_list[i], "ntrees =", ntrees, "\n")
     splits <- seq(quantile(lag_dat[complete,], .05), quantile(lag_dat[complete,], .95), length.out = 10) #5%and 95% percentile
     
@@ -261,7 +261,7 @@ for (i in (1:length(combo_list))){
       
       #Create one merged file
       d<-merge(d, data_list[[other_countries[i]]], by=c("UTC.time"))
-      print(colnames(d))
+      #print(colnames(d))
       #d$D<- d$D.y
       d$NG..SUN<- d$NG..SUN.x 
       #d$CO2.Emissions.Generated <- d$CO2.Emissions.Generated.y
@@ -273,5 +273,6 @@ for (i in (1:length(combo_list))){
   }
   
 }
+```
 
 
