@@ -23,21 +23,13 @@ library(viridis)
 ```{r}
 countries <- c("CAL", "CAR", "CENT", "FlA", "MIDA", "MIDW", "NE", "NW",
              "SE", "SW", "TEN", "TEX")
-start_date = "2018-07-01"
-end_date = "2023-07-01"
 
-#Preprocess data for every region
-get_data<- function(r, start_date= "2018-07-01", end_date="2023-07-01"){
-  cat(r, "")
-  data <- read_xlsx(paste0("data/Region_", r, ".xlsx"), guess_max = 70000)
-  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`NG: SUN`  < 0), 0)
-  data$`NG: SUN` = replace(data$`NG: SUN` , which(data$`CO2 Emissions Generated`  <= 0), NA)
-  data <- data[data$`Local date` >= start_date & data$`Local date` < end_date, ]
-  return (data)
-}
 if (!file.exists("output")){
     dir.create("output")
 }
+
+# ALERT: Run DistributedModelGeneration.Rmd to create all the models before proceeding....
+
 ```
   
 ```{r}
@@ -46,8 +38,7 @@ library(readxl)
 library(data.table)
 library(lubridate)
 library(ggplot2)
-countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 
-               'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+
 solar_cap <- fread("data/solar_capacity_factor.csv")
 # Change hour to 0-23 for wraparound
 solar_cap[, Hour := Hour %% 24]

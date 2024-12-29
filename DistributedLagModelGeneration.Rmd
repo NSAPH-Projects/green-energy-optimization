@@ -28,44 +28,22 @@ library(foreach)
 ```{r}
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
 
+lags <- 12 # Set the number of lag hours
+
 data_list <- list()
 lag_data_list <- list()
 lead_data_list <- list()
 complete_list <- list()
 for (i in (1:length(countries))){
   print(countries[i])
-  data <- read_xlsx(paste("../data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
-  #print(nrow(data))
+  
+  # ALERT: Run PreprocessingData.Rmd before proceeding...
+  
+  #Read csv files generated after preprocessing
+  data = read.csv(paste("data/", countries[i], ".csv", sep=""))
   setDT(data)
-  
-  # Use filters after the shifted solar data is created
-  #data <- data[!is.na(`NG: SUN`)]
-  #data <- data[!which(`NG: SUN`<0)]
-  #data <- data[which(`CO2 Emissions Generated`>0)]
-  
-  data[, date2 := as_date(`Local date`)]
-  data[, dow := wday(date2)]
-  data[, week := week(date2)]
-  data[, month := month(date2)]
-  data[, year := year(date2)]
-  data[, demand := `D`]
-  data[, index := 1:.N]
-  
-  # Make column names safe for use in formulas
-  setnames(data, make.names(names(data)))
-  #print(colnames(data))
-  
-  # Only consider data between during time period
-  start_date = "2018-07-01"
-  end_date = "2023-07-01"
-  data <- data[data$date2 >= start_date & data$date2 < end_date, ]
-  
-  #convert negative solar values and zero CO2 emissions as NA. 
-  data$NG..SUN = replace(data$NG..SUN , which(data$NG..SUN  < 0), 0)
-  data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated <= 0), NA)
 
   # Create lagged data
-  lags <- 12
   if (!file.exists(paste0("tdlm_models_lag",lags))){
     dir.create(paste0("tdlm_models_lag",lags))
   }
@@ -180,7 +158,6 @@ restarts <- 5
 
 ```{r}
 
-lags <- 4
 models_filename = paste0("tdlm_models_lag",lags)
 run_analysis <- function(combo, base, other, i){
     print(paste("base=",base, ", other=", other, sep=""))
