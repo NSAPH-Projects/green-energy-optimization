@@ -68,6 +68,8 @@ hr_cap <- solar_cap[Region == r & year == y]
 #d <- combine.models(dm_mlist)
 lags=12
 models_filename = "tdlm_models"
+
+
 load(paste0(models_filename,"/dm_mod_", r, ".Rda"))
 d<- dm
 # Loop over hours and calculate CO2 offset for increased solar by x%
@@ -245,10 +247,25 @@ colnames(solar_increase) = c(0.05, 0.1, 0.15,0.2)
 
 
 solar_increase[] <- lapply(solar_increase, function(x) as.numeric(as.character(x)))
+#           0.05       0.1      0.15       0.2
+#CAL  2126.78200 4253.5640 6380.3460 8507.1280
+#CAR   486.54500  973.0900 1459.6350 1946.1800
+#FlA   561.88100 1123.7620 1685.6430 2247.5240
+#MIDA  361.84275  723.6855 1085.5283 1447.3710
+#MIDW  223.16100  446.3220  669.4830  892.6440
+#NW    731.97100 1463.9420 2195.9130 2927.8840
+#SE    409.47525  818.9505 1228.4258 1637.9010
+#SW    256.90525  513.8105  770.7157 1027.6210
+#TEX  1214.84775 2429.6955 3644.5433 4859.3910
+#CENT   24.85650   49.7130   74.5695   99.4260
+#TEN    68.92113  137.8423  206.7634  275.6845
+#NE     46.46450   92.9290  139.3935  185.8580
 column_sums = colSums(solar_increase)
 
 # Print the column sums
 print(column_sums)
+#     0.05       0.1      0.15       0.2 
+# 6513.653 13027.306 19540.959 26054.612 
 
 
 # Combined plots
@@ -476,7 +493,7 @@ dev.off()
 values_df <- as.data.frame(values)
 rownames(values_df) = perc_increase*100
 colnames(values_df) = names[colnames(values_df)]
-values_df = -values_df*365*20/1000000
+values_df = -values_df*365/1000000 #changed from 20 years to 1 year
 
 # Create long form of the values df
 long_df = values_df %>% pivot_longer(cols=colnames(values_df),
@@ -489,7 +506,7 @@ write.csv(long_df, "output/total_effect.csv")
 # Stacked plot
 p_total<- ggplot(data=long_df, aes(fill=Regions, y=co2_offset, x=percent)) + 
     geom_bar(position="stack", stat="identity", width=3) +
-    geom_hline(yintercept=617) +
+    geom_hline(yintercept=30.85) +
     theme_minimal(base_size = 24) +
     labs(x = "Increase in Solar (in percentage)", y = TeX("Change in CO$_2$ (in metric tons)"), color = "Regions")+ coord_flip()
 png(paste("output/total.png", sep=""), width=1000, height=500)
@@ -498,6 +515,35 @@ dev.off()
 
 #Print total 20 years CO2 change by Percent
 sum(long_df[long_df$percent==15,]$co2_offset)
+```
+
+```{r}
+#New figure 6
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 
+               'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+solar_cap <- fread("data/solar_capacity_factor.csv")
+# Change hour to 0-23 for wraparound
+solar_cap[, Hour := Hour %% 24]
+# Rename Florida region in capacity file
+solar_cap[Region == "FLA", Region := "FlA"]
+
+# calculate potential CO2 offset
+co2_factor_mwh <- data.table(type = c("Coal", "Natural Gas", "Oil"),
+                             co2_factor = c(1.029, 0.448, 1.050))
+co2_potential_offset <-
+  rbindlist(lapply(countries, function(r) {
+    rbindlist(lapply(c(5, 10, 15, 20), function(p) {
+      s <- solar_cap[Region == r & year == 2022, sum(solar_median_mwh)] * (p / 100)
+      data.table(Regions = r, percent = p, solar_inc = s * 365 / 1000000,
+                 source = co2_factor_mwh$type,
+                 offset = s * co2_factor_mwh$co2_factor * 365 / 1000000)
+    }))
+  }))
+co2_potential_offset[, .(MMT_CO2 = sum(offset)), by = .(percent, source)]
+all_results[r1 == r2, sum(as.numeric(effect_5), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_10), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_15), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_20), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
 ```
 
 ```{r}
@@ -536,6 +582,9 @@ lag_vector = c(4,8,12,16,20)
 
 for (lags in lag_vector){
   models_filename = paste0("tdlm_models_lag",lags)
+  if(lags==12){
+    models_filename = "tdlm_models"
+  }
   load(paste0(models_filename,"/dm_mod_", r, ".Rda"))
   d<- dm
   # Loop over hours and calculate CO2 offset for increased solar by x%
