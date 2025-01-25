@@ -67,7 +67,24 @@ hr_cap <- solar_cap[Region == r & year == y]
 #load(paste0("tdlm_models/mlist_", r, ".Rda"))
 #d <- combine.models(dm_mlist)
 lags=12
-models_filename = "tdlm_models"
+models_filename = "tdlm_models_lag12"
+
+solar_medians <- solar_cap %>%
+  filter(year == 2022) %>%
+  group_by(Region) %>%
+  summarise(total_median = sum(solar_median_mwh, na.rm = TRUE), .groups = 'drop')
+
+solar_medians <- solar_medians %>%
+  mutate(
+    "0.05" = total_median * 0.05,
+    "0.1" = total_median * 0.10,
+    "15" = total_median * 0.15,
+    "20" = total_median * 0.20
+  )
+
+# Print the array
+print("coal")
+solar_medians[,-1]*1.01
 
 
 load(paste0(models_filename,"/dm_mod_", r, ".Rda"))
@@ -89,7 +106,7 @@ co2_offset <- rbindlist(lapply(0:23, function(h) {
                               rep(1, sum(h:(h+lags) >= 24))), # Needed for line break in hourly lag plot
                Percent = perc_increase[p],
                Inc_Solar = m*perc_increase[p],
-               CO2_offset = -s$matfit[p,],
+               CO2_offset = -sapply(1:(lags+1), function(l) median(s$dlm_mcmc[l,p,])), #changed to median
                C_lower = -s$ciupper[p,],
                C_upper = -s$cilower[p,])
   }))
@@ -121,7 +138,7 @@ p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
        color = "Observation\nhour",
        title = "")
 
-  png(paste("output/", r, "_hourly_together.png", sep=""), width=800, height=400)
+  png(paste("output/", r, "_hourly_together_median.png", sep=""), width=800, height=400)
   print(p2a)
   dev.off() 
 ```
@@ -164,7 +181,7 @@ co2_scale <- round(-co2_offset_ci[[r]][Percent == x, sum(CO2_offset), by = .(Hou
 ][, .(lower = quantile(V1, 0.025)), by = .(Hour)][, min(lower)] / 200, 1)
 
 p2b<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, Samp)
-][, .(mean = mean(V1), lower = quantile(V1, 0.025),
+][, .(mean = median(V1), lower = quantile(V1, 0.025), #changed to median
       upper = quantile(V1, 0.975)), by = .(Hour)]) +
   geom_line(data = co2_offset_ci[["CAL"]][Percent == x, mean(Inc_Solar), by = Start],
             aes(x = Start, y = V1/mwh_scale),
@@ -189,7 +206,7 @@ p2b<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, 
 
 
 #png(paste(r, "_cumulative.png", sep=""), width=1000, height=800)
-png(paste("output/", r, "_cumulative.png", sep=""), width=800, height=400)
+png(paste("output/", r, "_cumulative_median.png", sep=""), width=800, height=400)
 print(p2b)
 dev.off()
 ```
@@ -198,8 +215,8 @@ dev.off()
 #For Figure 3 (hourly total)
 perc_increase <- c(0.05, 0.1, 0.15, 0.2)
 countries <- c('CAL', 'CAR','FlA', 'MIDA', 'MIDW', 
-               'NW', 'SE', 'SW', 'TEX', 'CENT', 'TEN', 'NE')
-names <- c("California", "Carolinas", "Florida", "Mid-Atlantic", "Midwest",  "Northwest", "Southeast", "Southwest", "Texas", "Central",  "Tennessee", "New England")
+               'NW', 'SE', 'SW', 'TEX', 'TEN', 'CENT', 'NE')
+names <- c("California", "Carolinas", "Florida", "Mid-Atlantic", "Midwest",  "Northwest", "Southeast", "Southwest", "Texas", "Tennessee","Central",   "New England")
 names(names) <- countries
 co2_offset_comb <- list()
 for (r in countries) {
@@ -226,7 +243,7 @@ for (r in countries) {
                                 rep(1, sum(h:(h+lags) >= 24))), # Needed for line break in hourly lag plot
                  Percent = perc_increase[p],
                  Inc_Solar = m * (1 + perc_increase[p]) - m,
-                 CO2_offset = -s$matfit[p,])
+                 CO2_offset = -sapply(1:(lags+1), function(l) median(s$dlm_mcmc[l,p,]))) #changed to median
     }))
   }))
 }
@@ -271,9 +288,9 @@ print(column_sums)
 # Combined plots
 co2_plots <- list()
 for (r in countries) {
-  ylim=-1000
-  if(r %in% c('CENT', 'TEN', 'NE')){
-    ylim=-50
+  ylim=-700 #prev:-1000
+  if(r %in% c('TEN', 'CENT', 'NE')){
+    ylim=-40 #prev:-50
   }
   mwh_scale <- 1#floor(co2_offset_comb[[r]][, first(Inc_Solar), 
                                           # by = .(Start, Percent)][, max(V1)] / 20) / 10
@@ -332,7 +349,7 @@ annotated_plot <- annotate_figure(
   )
 )
 
-png(paste("output/cumulative_combined.png", sep=""), width=1000, height=1000)
+png(paste("output/cumulative_combined_median.png", sep=""), width=1000, height=1000)
 print(annotated_plot)
 dev.off()
 ```
@@ -340,6 +357,11 @@ dev.off()
 ```{r}
 #For Figures 4 (per day total), 5 (interregional), 6 (next two decades) and table 1
 # Collect all posterior samples for 95% CI calculation
+perc_increase <- c(0.05, 0.1, 0.15, 0.2)
+countries <- c('CAL', 'CAR','CENT','FlA', 'MIDA', 'MIDW', 'NE',
+               'NW', 'SE', 'SW', 'TEN', 'TEX')
+names <- c("California", "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest","New England", "Northwest", "Southeast", "Southwest",  "Tennessee", "Texas")
+names(names) <- countries
 co2_offset_comb <- list()
 for (r in countries) {
   print(r)
@@ -370,6 +392,65 @@ for (r in countries) {
 co2_offset_comb <- rbindlist(co2_offset_comb)
 co2_offset_comb$Region <- factor(co2_offset_comb$Region, countries, names)
 
+# For Figure 4
+
+p_daily<-  ggplot(data=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent, Samp)
+][, .(mean = median(V1), lower = quantile(V1, 0.025), #changed to median
+      upper = quantile(V1, 0.975)),
+  by = .(Region, Percent)],
+  aes(x = Percent, y = mean, ymin = lower, ymax = upper, color = factor(Percent))) +
+  geom_point(size = 2) +
+  geom_errorbar(width = 0.025, size = 1) +
+  facet_wrap(~ Region) +
+  theme_minimal(base_size = 24) +
+  theme(legend.position = "none", 
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black")) +
+  scale_x_continuous(labels = function(x) paste0(round(x * 100), "%")) +
+  labs(x = "Solar increase (in %)",
+       y = TeX("Change in CO$_2$ (in metric tons)"))
+
+png(paste("output/daily_median.png", sep=""), width=800, height=600)
+print(p_daily)
+dev.off()
+```
+```{r}
+# For Figure 5(cumulative annual plot for )
+countries <- c('CAL', 'CAR','CENT', 'FlA', 'MIDA', 'MIDW', 'NE',
+               'NW', 'SE', 'SW', 'TEN', 'TEX')
+names <- c("California", "Carolinas", "Central", "Florida", "Mid-Atlantic", "Midwest",  "New England", "Northwest", "Southeast", "Southwest", "Tennessee", "Texas")
+# Convert list to dataframe
+w=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent, Samp)
+][, .(mean = median(V1), lower = quantile(V1, 0.025), #changed to median
+      upper = quantile(V1, 0.975)),
+  by = .(Region, Percent)]
+w$Percent=w$Percent*100
+w$mean = -w$mean*365/1000000
+
+# Stacked plot
+p_total<- ggplot(data=w, aes(fill=Region, y=mean, x=Percent)) + 
+    geom_bar(position="stack", stat="identity", width=3) +
+    #geom_hline(yintercept=30.85) +
+    theme_minimal(base_size = 24) +
+    labs(x = "Increase in Solar (in percentage)", y = TeX("Change in CO$_2$ (in metric tons)"), color = "Regions")+ coord_flip()
+png(paste("output/total_median.png", sep=""), width=1000, height=500)
+print(p_total)
+dev.off()
+
+#Print total annual CO2 change by Percent
+sum(long_df[long_df$percent==15,]$co2_offset)
+```
+
+```{r}
+# For table in Appendix (total change in CO2 per day)
+table1=cat(apply(dcast(co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent, Samp)
+][, .(paste0(round(median(V1), 1), " (", round(quantile(V1, 0.025), 1), ", ", #changed to median
+             round(quantile(V1, 0.975), 1), ")")),
+  by = .(Region, Percent)], Region ~ Percent), 1, paste, collapse = " & "), sep = "\\\\\n")
+```
+
+
+```{r}
 #Combine within region and neighboring effect on r1 from each country r2
 all_results<- c("r1", "r2", "h", "effect_5", "effect_10", "effect_15", "effect_20")
 values<- list()
@@ -386,8 +467,8 @@ for(r1 in countries){
   for(h in 0:23){
           m <- hr_cap[Hour == h, solar_median_mwh]
           s <- summary(d, cenval = m,
-                   pred.at = m * (1 + perc_increase), verbose = F)
-          mean <- s$cumulative.effect$mean
+                   pred.at = m * (1 + perc_increase), verbose = F, mcmc=TRUE)
+          mean <-  apply(s$cumulative_mcmc, 2, median)  #s$cumulative.effect$mean
           effect = effect-mean
           all_results = rbind(all_results, c(r1, r1, h, as.numeric(mean[1]), as.numeric(mean[2]), as.numeric(mean[3]), as.numeric(mean[4])))
          }
@@ -403,8 +484,8 @@ for(r1 in countries){
           #d <- combine.models(dm_mlist)
           d<- dm
           s <- summary(d, cenval = m,
-                   pred.at = m * (1 + perc_increase), verbose = F)
-          mean=s$cumulative.effect$mean
+                   pred.at = m * (1 + perc_increase), verbose = F,mcmc=TRUE)
+          mean=apply(s$cumulative_mcmc, 2, median) #s$cumulative.effect$mean changed to median
           effect = effect-mean
           all_results = rbind(all_results, c(r2, r1, h, as.numeric(mean[1]), as.numeric(mean[2]), as.numeric(mean[3]), as.numeric(mean[4])))
          }
@@ -415,41 +496,13 @@ for(r1 in countries){
 all_results = as.data.frame(all_results)
 colnames(all_results) = all_results[1,]
 all_results = all_results[-1,]
-write.csv(all_results, "output/all_results.csv")
+write.csv(all_results, "output/all_results_median.csv")
 
-# For Figure 4
 
-p_daily<-  ggplot(data=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent, Samp)
-][, .(mean = mean(V1), lower = quantile(V1, 0.025),
-      upper = quantile(V1, 0.975)),
-  by = .(Region, Percent)],
-  aes(x = Percent, y = mean, ymin = lower, ymax = upper, color = factor(Percent))) +
-  geom_point(size = 2) +
-  geom_errorbar(width = 0.025, size = 1) +
-  facet_wrap(~ Region) +
-  theme_minimal(base_size = 24) +
-  theme(legend.position = "none", 
-        axis.line = element_line(color = "black"),
-        axis.ticks = element_line(color = "black")) +
-  scale_x_continuous(labels = function(x) paste0(round(x * 100), "%")) +
-  labs(x = "Solar increase (in %)",
-       y = TeX("Change in CO$_2$ (in metric tons)"))
-
-png(paste("output/daily.png", sep=""), width=800, height=600)
-print(p_daily)
-dev.off()
 ```
 
 ```{r}
-# For table in Appendix (total change in CO2 per day)
-table1=cat(apply(dcast(co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent, Samp)
-][, .(paste0(round(mean(V1), 1), " (", round(quantile(V1, 0.025), 1), ", ",
-             round(quantile(V1, 0.975), 1), ")")),
-  by = .(Region, Percent)], Region ~ Percent), 1, paste, collapse = " & "), sep = "\\\\\n")
-```
-
-```{r}
-#For Figure 5 (interregional effect)
+#For Figure 6 (interregional effect)
 wide_df <- as.data.frame(all_results)
 colnames(wide_df) <- c("Gen_Region", "Import_Region", "Hour", "Percent_5", "Percent_10", "Percent_15", "Percent_20")
 wide_df$Percent_5 = as.numeric(wide_df$Percent_5)
@@ -473,7 +526,7 @@ daily_co2$CO2 <- -daily_co2$CO2
 p_interregional<- ggplot(daily_co2) +
   geom_tile(aes(x = Gen_Region, y = Import_Region, fill = CO2)) +
   facet_wrap(~Percent) +
-  scale_fill_viridis_c(limits = c(-15000, 0)) +
+  scale_fill_viridis_c(limits = c(-10000, 0)) +
   theme_minimal(base_size = 24) +
   theme(axis.line = element_line(color = "black"),
         axis.ticks = element_line(color = "black"),
@@ -482,39 +535,10 @@ p_interregional<- ggplot(daily_co2) +
   coord_equal() +
   labs(x = "Generating Region", y = "Import Region",
        fill = TeX("Import region CO$_{2}$ change"))
-png(paste("output/interregional.png", sep=""), width=1000, height=1000)
+png(paste("output/interregional_median.png", sep=""), width=1000, height=1000)
 print(p_interregional)
 dev.off()
 
-
-# For Figure 6 (cumulative plot for )
-
-# Convert list to dataframe
-values_df <- as.data.frame(values)
-rownames(values_df) = perc_increase*100
-colnames(values_df) = names[colnames(values_df)]
-values_df = -values_df*365/1000000 #changed from 20 years to 1 year
-
-# Create long form of the values df
-long_df = values_df %>% pivot_longer(cols=colnames(values_df),
-                    names_to='Regions',
-                    values_to='co2_offset')
-long_df$percent = sort(rep(perc_increase*100, 12))
-long_df=as.data.frame(long_df)
-write.csv(long_df, "output/total_effect.csv")
-
-# Stacked plot
-p_total<- ggplot(data=long_df, aes(fill=Regions, y=co2_offset, x=percent)) + 
-    geom_bar(position="stack", stat="identity", width=3) +
-    geom_hline(yintercept=30.85) +
-    theme_minimal(base_size = 24) +
-    labs(x = "Increase in Solar (in percentage)", y = TeX("Change in CO$_2$ (in metric tons)"), color = "Regions")+ coord_flip()
-png(paste("output/total.png", sep=""), width=1000, height=500)
-print(p_total)
-dev.off()
-
-#Print total 20 years CO2 change by Percent
-sum(long_df[long_df$percent==15,]$co2_offset)
 ```
 
 ```{r}
@@ -540,10 +564,10 @@ co2_potential_offset <-
     }))
   }))
 co2_potential_offset[, .(MMT_CO2 = sum(offset)), by = .(percent, source)]
-all_results[r1 == r2, sum(as.numeric(effect_5), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
-all_results[r1 == r2, sum(as.numeric(effect_10), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
-all_results[r1 == r2, sum(as.numeric(effect_15), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
-all_results[r1 == r2, sum(as.numeric(effect_20), na.rm = T) * 365 / 1000000, by = r2][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_5), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_10), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_15), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
+all_results[r1 == r2, sum(as.numeric(effect_20), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
 ```
 
 ```{r}
@@ -578,13 +602,10 @@ hr_cap <- solar_cap[Region == r & year == y]
 #load(paste0("tdlm_models/mlist_", r, ".Rda"))
 #d <- combine.models(dm_mlist)
 
-lag_vector = c(4,8,12,16,20)
+lag_vector = c(4,8,12,16)
 
 for (lags in lag_vector){
   models_filename = paste0("tdlm_models_lag",lags)
-  if(lags==12){
-    models_filename = "tdlm_models"
-  }
   load(paste0(models_filename,"/dm_mod_", r, ".Rda"))
   d<- dm
   # Loop over hours and calculate CO2 offset for increased solar by x%
@@ -604,7 +625,7 @@ for (lags in lag_vector){
                                 rep(1, sum(h:(h+lags) >= 24))), # Needed for line break in hourly lag plot
                  Percent = perc_increase[p],
                  Inc_Solar = m*perc_increase[p],
-                 CO2_offset = -s$matfit[p,],
+                 CO2_offset = -s$matfit[p,],#-sapply(1:(lags+1), function(l) mean(s$dlm_mcmc[l,p,])), #-s$matfit[p,]
                  C_lower = -s$ciupper[p,],
                  C_upper = -s$cilower[p,])
     }))
@@ -633,7 +654,7 @@ for (lags in lag_vector){
        color = "Observation\nhour",
        title = paste0(lags, " lag-hours considered"))
 
-  png(paste("output/", r, "_lag", lags, "_hourly_together.png", sep=""), width=800, height=400)
+  png(paste("output/", r, "_lag", lags, "_hourly_together_median.png", sep=""), width=800, height=400)
   print(p2a_lags)
   dev.off() 
   
@@ -665,7 +686,8 @@ for (lags in lag_vector){
                      Percent = perc_increase[p],
                      Inc_Solar = m * (1 + perc_increase[p]) - m,
                      Samp = 1:d$mcmcIter,
-                     CO2_offset = -s$dlm_mcmc[l, p,])
+                     CO2_offset = -s$dlm_mcmc[l,p,]
+                     )
         }))
       }))
     }))
@@ -675,7 +697,7 @@ for (lags in lag_vector){
     #][, .(lower = quantile(V1, 0.025)), by = .(Hour)][, min(lower)] / 200, 1)
     
     p2b_lags<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, Samp)
-    ][, .(mean = mean(V1), lower = quantile(V1, 0.025),
+    ][, .(mean = mean(V1), lower = quantile(V1, 0.025), #changed to median
           upper = quantile(V1, 0.975)), by = .(Hour)]) +
       #geom_line(data = co2_offset_ci[["CAL"]][Percent == x, mean(Inc_Solar), by = Start],
       #          aes(x = Start, y = V1/mwh_scale),
@@ -699,7 +721,7 @@ for (lags in lag_vector){
     
     
     #png(paste(r, "_cumulative.png", sep=""), width=1000, height=800)
-    png(paste("output/", r, "_lag", lags, "_cumulative.png", sep=""), width=800, height=400)
+    png(paste("output/", r, "_lag", lags, "_cumulative_median.png", sep=""), width=800, height=400)
     print(p2b_lags)
     dev.off()
     
@@ -709,8 +731,170 @@ for (lags in lag_vector){
   }
   
 }
+```
 
 
+```{r}
+#Sensitivity Analysis with varying lag hours (for California->Southwest)
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 
+               'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
+solar_cap <- fread("data/solar_capacity_factor.csv")
+# Change hour to 0-23 for wraparound
+solar_cap[, Hour := Hour %% 24]
+# Rename Florida region in capacity file
+solar_cap[Region == "FLA", Region := "FlA"]
+
+
+# Policy changes
+perc_increase <- c(.05, .1, .15, .2)
+
+
+# Region to plot (for Fig 2a and 2b)
+r <- "CAL"
+r2 <- "SW"
+
+
+# DLM at x=0.15 increase for Fig 2a and 2b
+x = 0.15 #solar increase %
+
+#Specify year
+y <- "2022"
+
+# Get solar capacity and hourly median for year 2022
+hr_cap <- solar_cap[Region == r & year == y]
+# Load DLNM model
+#load(paste0("tdlm_models/mlist_", r, ".Rda"))
+#d <- combine.models(dm_mlist)
+
+lag_vector = c(4,8,12,16)
+
+for (lags in lag_vector){
+  models_filename = paste0("tdlm_models_lag",lags)
+  load(paste0(models_filename,"/dm_mod_", r,"-",r2, ".Rda"))
+  d<- dm
+  # Loop over hours and calculate CO2 offset for increased solar by x%
+  perc_increase <- c(x)
+  co2_offset <- rbindlist(lapply(0:23, function(h) {
+    m <- hr_cap[Hour == h, solar_median_mwh]
+    s <- summary(d, cenval = m,
+                 pred.at = m * (1 + perc_increase), 
+                 mcmc = TRUE, verbose = F)
+    # Loop over percent increase, record lagged CO2 offset
+    rbindlist(lapply(1:length(s$pred.at), function(p) {
+      data.table(Region = r,
+                 ImportingRegion = r2, 
+                 Start = h,
+                 Med_Solar = m,
+                 Hour = h:(h+lags) %% 24, # Loop back to 0 if Hour > 23
+                 Wraparound = c(rep(0, sum(h:(h+lags) < 24)),
+                                rep(1, sum(h:(h+lags) >= 24))), # Needed for line break in hourly lag plot
+                 Percent = perc_increase[p],
+                 Inc_Solar = m*perc_increase[p],
+                 CO2_offset = -sapply(1:(lags+1), function(l) median(s$dlm_mcmc[l,p,])), #-s$matfit[p,] #-s$matfit[p,],
+                 C_lower = -s$ciupper[p,],
+                 C_upper = -s$cilower[p,])
+    }))
+  }))
+  
+  p2a_lags<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
+  geom_line(aes(x = Start, y = CO2_offset, 
+                color = factor(Hour),
+                group = paste0(Hour, Wraparound)), size = 1) +
+  geom_ribbon(data = co2_offset[Percent == x & Hour %in% c(12, 20)], 
+              aes(x = Start, ymin = C_lower, ymax = C_upper, 
+              fill = factor(Hour)), alpha=0.3, show.legend = FALSE) +
+  geom_point(data = co2_offset[Percent == x & Hour %in% c(12, 20) & Start==Hour, last(CO2_offset), by = Hour],
+             aes(x = Hour, y = V1, color = factor(Hour)), size = 2) +
+  theme_minimal(base_size = 24) +
+  theme(legend.position = "right",
+        legend.key.height = unit(1.5, "cm"),
+        legend.text = element_text(size = 18),  
+        legend.title = element_text(size = 18)) +
+  scale_x_continuous(limits=c(0,23), expand = c(0, 0), breaks = c(0, 4, 8, 12, 16, 20),
+                     labels = c("00:00", "04:00", "08:00", "12:00", "16:00", "20:00")) +
+  scale_y_continuous(limits = c(-700, 0.1))+
+  scale_color_manual(values = c(2,3),
+    labels = c("12:00", "20:00")) +
+  labs(x = "Hour of the day", y = TeX("CO$_2$ change (metric tons)"), 
+       color = "Observation\nhour",
+       title = paste0(lags, " lag-hours considered"))
+
+  png(paste("output/", r,"-",r2, "_lag", lags, "_hourly_together_median.png", sep=""), width=800, height=400)
+  print(p2a_lags)
+  dev.off() 
+  
+  #CO2effect_for_an_hour = co2_offset[Percent == x & Hour %in% c(4, 8, 12,16,20), sum(CO2_offset), by="Hour"]
+  #print(paste0("CO2 offset for increasing solar at 4 pm = ", CO2effect_for_an_hour))
+  
+  #Figure cumulative
+  co2_offset_ci <- list()
+  for (r in "CAL") {
+    # Get solar capacity and hourly median for year 2022
+    hr_cap <- solar_cap[Region == r & year == 2022]
+    # Load DLNM model
+    #load(paste0("tdlm_models/mlist_", r, ".Rda"))
+    #d <- combine.models(dm_mlist)
+    load(paste0(models_filename,"/dm_mod_", r,"-",r2, ".Rda"))
+    d<- dm
+    # Loop over hours and calculate CO2 offset for increased solar by x%
+    co2_offset_ci[[r]] <- rbindlist(lapply(0:23, function(h) {
+      m <- hr_cap[Hour == h, solar_median_mwh]
+      s <- summary(d, cenval = m,
+                   pred.at = m * (1 + perc_increase), 
+                   mcmc = TRUE, verbose = F)
+      # Loop over percent increase, record lagged CO2 offset
+      rbindlist(lapply(1:length(s$pred.at), function(p) {
+        rbindlist(lapply(1:(lags+1), function(l) {
+          data.table(Region = r,
+                     Start = h,
+                     Hour = (h+l-1) %% 24, # Loop back to 0 if Hour > 23
+                     Percent = perc_increase[p],
+                     Inc_Solar = m * (1 + perc_increase[p]) - m,
+                     Samp = 1:d$mcmcIter,
+                     CO2_offset = -s$dlm_mcmc[l, p,])
+        }))
+      }))
+    }))
+    
+    #mwh_scale <- round(co2_offset_ci[[r]][Percent == x, mean(Inc_Solar), by = Start][, max(V1)] / 200, 1)
+    #co2_scale <- round(-co2_offset_ci[[r]][Percent == x, sum(CO2_offset), by = .(Hour, Samp)
+    #][, .(lower = quantile(V1, 0.025)), by = .(Hour)][, min(lower)] / 200, 1)
+    
+    p2b_lags<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, Samp)
+    ][, .(mean = median(V1), lower = quantile(V1, 0.025), #changed to median
+          upper = quantile(V1, 0.975)), by = .(Hour)]) +
+      #geom_line(data = co2_offset_ci[["CAL"]][Percent == x, mean(Inc_Solar), by = Start],
+      #          aes(x = Start, y = V1/mwh_scale),
+      #          size = 1, linetype = 2) +
+      geom_ribbon(aes(x = Hour, ymin = lower, ymax = upper), fill = "grey") +
+      geom_line(aes(x = Hour, y = mean), size = 1) +
+      #geom_hline(yintercept = 0, size = 1) +
+      theme_minimal(base_size = 24) +
+      theme(legend.position = "top",
+            legend.key.width = unit(2, "cm"),
+            axis.line = element_line(),
+            axis.ticks = element_line()) +
+      scale_x_continuous(expand = c(0, 0), breaks = c(0, 4, 8, 12, 16, 20),
+                         labels = c("00:00", "04:00", "08:00", "12:00", "16:00", "20:00")) +
+      scale_y_continuous(limits = c(-800, 0), breaks = c(-800, -700, -600, -500, -400, -300, -200, -100, 0)) +
+      scale_color_discrete(labels = paste0(c(5, 10, 15, 20), "%")) +
+      labs(x = "Hour of the day", 
+           y = TeX("$\\leftarrow$ CO$_2$ change (metric tons)"), #"<- Total CO2 Offset (metric tons) \t|\t Increase in Median Solar (MWh) ->",
+           color = "Solar capacity increase", 
+           title = paste0(lags, " lag-hours considered"))#paste0(r, ": CO2 offset for alternate policy changes in solar capacity"))
+    
+    
+    #png(paste(r, "_cumulative.png", sep=""), width=1000, height=800)
+    png(paste("output/", r, "-",r2, "_lag", lags, "_cumulative_median.png", sep=""), width=800, height=400)
+    print(p2b_lags)
+    dev.off()
+    
+    #daily mean
+    #daily = sum(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, Samp)][, .(mean = mean(V1), lower = quantile(V1, 0.025), upper = quantile(V1, 0.975)), by = .(Hour)]$mean)
+    #print(paste(daily, "CO2 offset estimated considering ", lags, " lag-hours", sep=""))
+  }
+  
+}
 
 
 ```

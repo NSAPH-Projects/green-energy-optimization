@@ -28,7 +28,7 @@ library(foreach)
 ```{r}
 countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
 
-lags <- 12 # Set the number of lag hours (update this for analyse sensitivity to lag hours)
+lags <- 16 # Set the number of lag hours (update this for analyse sensitivity to lag hours)
 models_filename = paste0("tdlm_models_lag",lags)
 #if(lags==12){
 #  models_filename = "tdlm_models"
