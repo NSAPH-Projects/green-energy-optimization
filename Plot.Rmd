@@ -67,25 +67,7 @@ hr_cap <- solar_cap[Region == r & year == y]
 #load(paste0("tdlm_models/mlist_", r, ".Rda"))
 #d <- combine.models(dm_mlist)
 lags=12
-models_filename = "tdlm_models_lag12"
-
-solar_medians <- solar_cap %>%
-  filter(year == 2022) %>%
-  group_by(Region) %>%
-  summarise(total_median = sum(solar_median_mwh, na.rm = TRUE), .groups = 'drop')
-
-solar_medians <- solar_medians %>%
-  mutate(
-    "0.05" = total_median * 0.05,
-    "0.1" = total_median * 0.10,
-    "15" = total_median * 0.15,
-    "20" = total_median * 0.20
-  )
-
-# Print the array
-print("coal")
-solar_medians[,-1]*1.01
-
+models_filename = paste0("tdlm_models_lag",lags)
 
 load(paste0(models_filename,"/dm_mod_", r, ".Rda"))
 d<- dm
@@ -118,17 +100,17 @@ co2_offset <- rbindlist(lapply(0:23, function(h) {
 p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
   geom_line(aes(x = Start, y = CO2_offset, 
                 color = factor(Hour),
-                group = paste0(Hour, Wraparound)), size = 1) +
+                group = paste0(Hour, Wraparound)), size = 0.5) +
   geom_ribbon(data = co2_offset[Percent == x & Hour %in% c(12, 20)], 
               aes(x = Start, ymin = C_lower, ymax = C_upper, 
               fill = factor(Hour)), alpha=0.3, show.legend = FALSE) +
   geom_point(data = co2_offset[Percent == x & Hour %in% c(12, 20), last(CO2_offset), by = Hour],
-             aes(x = Hour, y = V1, color = factor(Hour)), size = 2) +
-  theme_minimal(base_size = 24) +
+             aes(x = Hour, y = V1, color = factor(Hour)), size = 0.5) +
+  theme_minimal(base_size = 8) +
   theme(legend.position = "right",
         legend.key.height = unit(1.5, "cm"),
-        legend.text = element_text(size = 18),  
-        legend.title = element_text(size = 18)) +
+        legend.text = element_text(size = 6),  
+        legend.title = element_text(size = 6)) +
   scale_x_continuous(limits=c(0,23), expand = c(0, 0), breaks = c(0, 4, 8, 12, 16, 20),
                      labels = c("00:00", "04:00", "08:00", "12:00", "16:00", "20:00")) +
   scale_y_continuous(limits = c(-450, 0.1))+
@@ -138,7 +120,7 @@ p2a<- ggplot(co2_offset[Percent == x & Hour %in% c(12, 20)]) +
        color = "Observation\nhour",
        title = "")
 
-  png(paste("output/", r, "_hourly_together_median.png", sep=""), width=800, height=400)
+  png(paste("output/", r, "_hourly_together_median.png", sep=""), width= 3900, height=1800, res=1200)
   print(p2a)
   dev.off() 
 ```
@@ -185,11 +167,11 @@ p2b<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, 
       upper = quantile(V1, 0.975)), by = .(Hour)]) +
   geom_line(data = co2_offset_ci[["CAL"]][Percent == x, mean(Inc_Solar), by = Start],
             aes(x = Start, y = V1/mwh_scale),
-            size = 1, linetype = 2) +
+            size = 0.5, linetype = 2) +
   geom_ribbon(aes(x = Hour, ymin = lower/co2_scale, ymax = upper/co2_scale), fill = "grey") +
-  geom_line(aes(x = Hour, y = mean/co2_scale), size = 1) +
+  geom_line(aes(x = Hour, y = mean/co2_scale), size = 0.5) +
   geom_hline(yintercept = 0, size = 1) +
-  theme_minimal(base_size = 24) +
+  theme_minimal(base_size = 7) +
   theme(legend.position = "top",
         legend.key.width = unit(2, "cm"),
         axis.line = element_line(),
@@ -206,7 +188,7 @@ p2b<-  ggplot(co2_offset_ci[[r]][Percent == 0.15, sum(CO2_offset), by = .(Hour, 
 
 
 #png(paste(r, "_cumulative.png", sep=""), width=1000, height=800)
-png(paste("output/", r, "_cumulative_median.png", sep=""), width=800, height=400)
+png(paste("output/", r, "_cumulative_median.png", sep=""), width= 3900, height=1900, res=1200)
 print(p2b)
 dev.off()
 ```
@@ -220,6 +202,7 @@ names <- c("California", "Carolinas", "Florida", "Mid-Atlantic", "Midwest",  "No
 names(names) <- countries
 co2_offset_comb <- list()
 for (r in countries) {
+  print(r)
   # Get solar capacity and hourly median for year 2022
   hr_cap <- solar_cap[Region == r & year == y]
   # Load DLNM model
@@ -305,14 +288,14 @@ for (r in countries) {
                                 by = .(Hour, Percent)],
               aes(x = Hour, y = CO2_offset/co2_scale, 
                   color = as.factor(Percent)),# linetype = as.factor(Percent)), 
-              size = 1) +
-    geom_hline(yintercept = 0, size = 1) +
-    theme_minimal(base_size = 18) +
+              size = 0.3) +
+    geom_hline(yintercept = 0, size = 0.3) +
+    theme_minimal(base_size = 10) +
     theme(legend.position = "bottom",
-          legend.key.width = unit(2, "cm"),
+          legend.key.width = unit(0.5, "cm"),
           axis.line = element_line(),
           axis.ticks = element_line(),
-          plot.subtitle = element_text(size = 16)) +
+          plot.subtitle = element_text(size = 8)) +
     scale_x_continuous(expand = c(0, 0), breaks = c(0, 4, 8, 12, 16, 20),
                        labels = c("00:00", "04:00", "08:00", "12:00", "16:00", "20:00")) +
     scale_y_continuous(limits = c(ylim, 0), expand=c(0,0)) +
@@ -341,15 +324,15 @@ annotated_plot <- annotate_figure(
   left = text_grob(
     label = TeX("CO$_2$ change (metric tons)"),
     rot = 90,
-    size = 24
+    size = 10
   ),
   bottom = text_grob(
     label = "Hour of the day",
-    size = 24
+    size = 10
   )
 )
 
-png(paste("output/cumulative_combined_median.png", sep=""), width=1000, height=1000)
+png(paste("output/cumulative_combined_median.png", sep=""), width= 8000, height=8000, res=1200)
 print(annotated_plot)
 dev.off()
 ```
@@ -399,10 +382,10 @@ p_daily<-  ggplot(data=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent
       upper = quantile(V1, 0.975)),
   by = .(Region, Percent)],
   aes(x = Percent, y = mean, ymin = lower, ymax = upper, color = factor(Percent))) +
-  geom_point(size = 2) +
-  geom_errorbar(width = 0.025, size = 1) +
+  geom_point(size = 0.5) +
+  geom_errorbar(width = 0.025, size = 0.3) +
   facet_wrap(~ Region) +
-  theme_minimal(base_size = 24) +
+  theme_minimal(base_size = 8) +
   theme(legend.position = "none", 
         axis.line = element_line(color = "black"),
         axis.ticks = element_line(color = "black")) +
@@ -410,7 +393,7 @@ p_daily<-  ggplot(data=co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent
   labs(x = "Solar increase (in %)",
        y = TeX("Change in CO$_2$ (in metric tons)"))
 
-png(paste("output/daily_median.png", sep=""), width=800, height=600)
+png(paste("output/daily_median.png", sep=""), width= 5000, height=4000, res=1200)
 print(p_daily)
 dev.off()
 ```
@@ -429,20 +412,19 @@ w$mean = -w$mean*365/1000000
 
 # Stacked plot
 p_total<- ggplot(data=w, aes(fill=Region, y=mean, x=Percent)) + 
-    geom_bar(position="stack", stat="identity", width=3) +
+    geom_bar(position="stack", stat="identity", width=2) +
     #geom_hline(yintercept=30.85) +
-    theme_minimal(base_size = 24) +
-    labs(x = "Increase in Solar (in percentage)", y = TeX("Change in CO$_2$ (in metric tons)"), color = "Regions")+ coord_flip()
-png(paste("output/total_median.png", sep=""), width=1000, height=500)
+    theme_minimal(base_size = 7) +
+    labs(x = "Increase in Solar (in percentage)", y = TeX("Change in CO$_2$ (in metric tons)"), color = "Regions")+ coord_flip()+
+    theme(legend.key.size = unit(0.3, "cm"))
+png(paste("output/total_median.png", sep=""), width= 3900, height=2200, res=1200)
 print(p_total)
 dev.off()
 
-#Print total annual CO2 change by Percent
-sum(long_df[long_df$percent==15,]$co2_offset)
 ```
 
 ```{r}
-# For table in Appendix (total change in CO2 per day)
+# For table S1 in Appendix (total change in CO2 per day)
 table1=cat(apply(dcast(co2_offset_comb[, sum(CO2_offset), by = .(Region, Percent, Samp)
 ][, .(paste0(round(median(V1), 1), " (", round(quantile(V1, 0.025), 1), ", ", #changed to median
              round(quantile(V1, 0.975), 1), ")")),
@@ -527,48 +509,20 @@ p_interregional<- ggplot(daily_co2) +
   geom_tile(aes(x = Gen_Region, y = Import_Region, fill = CO2)) +
   facet_wrap(~Percent) +
   scale_fill_viridis_c(limits = c(-10000, 0)) +
-  theme_minimal(base_size = 24) +
+  theme_minimal(base_size = 8) +
   theme(axis.line = element_line(color = "black"),
         axis.ticks = element_line(color = "black"),
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        legend.key.height = unit(2, "cm")) +
+        legend.key.height = unit(0.5, "cm")) +
   coord_equal() +
   labs(x = "Generating Region", y = "Import Region",
        fill = TeX("Import region CO$_{2}$ change"))
-png(paste("output/interregional_median.png", sep=""), width=1000, height=1000)
+png(paste("output/interregional_median.png", sep=""), width=5200, height=5200, res=1200)
 print(p_interregional)
 dev.off()
 
 ```
 
-```{r}
-#New figure 6
-countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 
-               'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-solar_cap <- fread("data/solar_capacity_factor.csv")
-# Change hour to 0-23 for wraparound
-solar_cap[, Hour := Hour %% 24]
-# Rename Florida region in capacity file
-solar_cap[Region == "FLA", Region := "FlA"]
-
-# calculate potential CO2 offset
-co2_factor_mwh <- data.table(type = c("Coal", "Natural Gas", "Oil"),
-                             co2_factor = c(1.029, 0.448, 1.050))
-co2_potential_offset <-
-  rbindlist(lapply(countries, function(r) {
-    rbindlist(lapply(c(5, 10, 15, 20), function(p) {
-      s <- solar_cap[Region == r & year == 2022, sum(solar_median_mwh)] * (p / 100)
-      data.table(Regions = r, percent = p, solar_inc = s * 365 / 1000000,
-                 source = co2_factor_mwh$type,
-                 offset = s * co2_factor_mwh$co2_factor * 365 / 1000000)
-    }))
-  }))
-co2_potential_offset[, .(MMT_CO2 = sum(offset)), by = .(percent, source)]
-all_results[r1 == r2, sum(as.numeric(effect_5), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
-all_results[r1 == r2, sum(as.numeric(effect_10), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
-all_results[r1 == r2, sum(as.numeric(effect_15), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
-all_results[r1 == r2, sum(as.numeric(effect_20), na.rm = T) * 365 / 1000000, by = r1][,sum(V1)]
-```
 
 ```{r}
 #Figure in Supplementary 
@@ -898,5 +852,75 @@ for (lags in lag_vector){
 
 
 ```
+```{r}
+#For Table S2 in the Supplementary Materials
+countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
 
+lags <- 12 # Set the number of lag hours (update this for analyse sensitivity to lag hours)
+
+data_list <- list()
+lag_data_list <- list()
+lead_data_list <- list()
+complete_list <- list()
+for (i in (1:length(countries))){
+  print(countries[i])
+  data <- read.csv(paste("data/", countries[i], ".csv", sep=""))
+  setDT(data)
+  
+  # Create lagged data
+  if (!file.exists(paste0("tdlm_models_lag",lags))){
+    dir.create(paste0("tdlm_models_lag",lags))
+  }
+  models_filename = paste0("tdlm_models_lag",lags)
+  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
+  #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
+  #lag_dat <- cbind(lead_dat, lag_dat)
+  # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
+  # Complete data rows
+  
+  data_list[[i]]<-data #Note: this data may contain NA values
+  lag_data_list[[i]]<- lag_dat #Note: this data may contain NA values
+  #lead_data_list[[i]]<-lead_dat
+  complete_list[[i]] <- which(complete.cases(lag_dat) & 
+                                complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
+  
+}
+
+# Determine final datasets (remove missing)
+final_data <- lapply(1:length(countries), function(i) {
+  data_list[[i]][complete_list[[i]]]
+})
+names(final_data) <- countries
+
+# Calculate hourly medians
+solar_medians <- lapply(final_data, function(f) {
+  f[year == 2022 & Hour %in% 1:24, median(NG..SUN), by = Hour] })
+
+#solar increase
+perc_inc <- lapply(c(0.05, 0.1, 0.15, 0.2), function(p) {
+  sapply(solar_medians, function(s) sum(s$V1 * p)) })
+
+#15%increase
+inc_15 = perc_inc[[3]] * 365 / 1000000
+
+#CO2 for  COL with 15% increase
+factors_COL=unlist(lapply(countries, function(c){(final_data)[[c]][year == 2022 & NG..COL != 0, 
+             mean(CO2.Emissions..COL / NG..COL, na.rm = T)]}))
+CO2_15_COL=factors_COL*inc_15
+
+#CO2 for  NG with 15% increase
+factors_NG=unlist(lapply(countries, function(c){(final_data)[[c]][year == 2022 & NG..NG != 0, 
+             mean(CO2.Emissions..NG / NG..NG, na.rm = T)]}))
+CO2_15_NG=factors_NG*inc_15
+
+#CO2 for  OIL with 15% increase
+factors_OIL=unlist(lapply(countries, function(c){(final_data)[[c]][year == 2022 & NG..OIL != 0, 
+             mean(CO2.Emissions..OIL / NG..OIL, na.rm = T)]}))
+CO2_15_OIL=factors_OIL*inc_15
+
+maxtab = cbind(inc_15, factors_COL,CO2_15_COL, factors_NG, CO2_15_NG, factors_OIL, CO2_15_OIL)
+maxtab = rbind(maxtab, "total"=colSums(maxtab, na.rm=T))
+write.csv(maxtab, "output/theoreticalmaxCO2.csv")
+
+```
 

@@ -28,7 +28,7 @@ for (i in (1:length(countries))){
   data <- read_xlsx(paste("data/Region_", countries[i], ".xlsx", sep=""), guess_max = 70000)
 
   # Once you're done, you may want to delete the downloaded file
-  #file.remove(paste("data/Region_",countries[i],".xlsx", sep=""))
+  file.remove(paste("data/Region_",countries[i],".xlsx", sep=""))
 
   #print(nrow(data))
   setDT(data)
@@ -56,91 +56,7 @@ for (i in (1:length(countries))){
   data$NG..SUN = replace(data$NG..SUN , which(data$CO2.Emissions.Generated <= 0), NA)
 
   #Save data
-  #write.csv(data, paste("data/",countries[i],".csv", sep=""), row.names = FALSE)
+  write.csv(data, paste("data/",countries[i],".csv", sep=""), row.names = FALSE)
 }
 ```
 
-```{r}
-countries <- c('CAL', 'CAR', 'CENT', 'FlA', 'MIDA', 'MIDW', 'NE', 'NW', 'SE', 'SW', 'TEN', 'TEX')
-
-lags <- 12 # Set the number of lag hours (update this for analyse sensitivity to lag hours)
-
-data_list <- list()
-lag_data_list <- list()
-lead_data_list <- list()
-complete_list <- list()
-for (i in (1:length(countries))){
-  print(countries[i])
-  data <- read.csv(paste("data/", countries[i], ".csv", sep=""))
-  setDT(data)
-  
-  # Create lagged data
-  if (!file.exists(paste0("tdlm_models_lag",lags))){
-    dir.create(paste0("tdlm_models_lag",lags))
-  }
-  models_filename = paste0("tdlm_models_lag",lags)
-  lag_dat <- as.matrix(data[, shift(NG..SUN, 0:lags, type = "lag")])
-  #lead_dat <- as.matrix(data[, shift(NG..SUN, 10:1, type = "lead")])
-  #lag_dat <- cbind(lead_dat, lag_dat)
-  # data[, demand_ma10 := rollmean(demand, k = 10)] -- CHECK! 
-  # Complete data rows
-  
-  data_list[[i]]<-data #Note: this data may contain NA values
-  lag_data_list[[i]]<- lag_dat #Note: this data may contain NA values
-  #lead_data_list[[i]]<-lead_dat
-  complete_list[[i]] <- which(complete.cases(lag_dat) & 
-                                complete.cases(data[, .(CO2.Emissions.Generated, demand)]))
-  
-}
-
-# Determine final datasets (remove missing)
-final_data <- lapply(1:length(countries), function(i) {
-  data_list[[i]][complete_list[[i]]]
-})
-names(final_data) <- countries
-
-# Calculate hourly medians
-solar_medians <- lapply(final_data, function(f) {
-  f[year == 2022 & Hour %in% 1:24, median(NG..SUN), by = Hour] })
-
-#solar increase
-perc_inc <- lapply(c(0.05, 0.1, 0.15, 0.2), function(p) {
-  sapply(solar_medians, function(s) sum(s$V1 * p)) })
-
-#15%increase
-inc_15 = perc_inc[[3]] * 365 / 1000000
-
-#CO2 for  COL with 15% increase
-factors_COL=unlist(lapply(countries, function(c){(final_data)[[c]][year == 2022 & NG..COL != 0, 
-             mean(CO2.Emissions..COL / NG..COL, na.rm = T)]}))
-CO2_15_COL=factors_COL*inc_15
-
-#CO2 for  NG with 15% increase
-factors_NG=unlist(lapply(countries, function(c){(final_data)[[c]][year == 2022 & NG..NG != 0, 
-             mean(CO2.Emissions..NG / NG..NG, na.rm = T)]}))
-CO2_15_NG=factors_NG*inc_15
-
-#CO2 for  OIL with 15% increase
-factors_OIL=unlist(lapply(countries, function(c){(final_data)[[c]][year == 2022 & NG..OIL != 0, 
-             mean(CO2.Emissions..OIL / NG..OIL, na.rm = T)]}))
-CO2_15_OIL=factors_OIL*inc_15
-
-maxtab = cbind(inc_15, factors_COL,CO2_15_COL, factors_NG, CO2_15_NG, factors_OIL, CO2_15_OIL)
-maxtab = rbind(maxtab, "total"=colSums(maxtab, na.rm=T))
-write.csv(maxtab, "output/theoreticalmaxCO2.csv")
-
-
-
-#max_co2 <- rbind(
-# Coal
-#sapply(1:4, function(i) {
-#  rbindlist(final_data)[year == 2022 & NG..COL != 0, 
-#                        mean(CO2.Emissions..COL / NG..COL, na.rm = T)] * 
-#    (perc_inc[[i]] * 365 / 1000000)
-#})
-#}
-
-#colnames(max_co2) <- c(0.05, 0.1, 0.15, 0.2)
-#rownames(max_co2) <- c("coal", "nat gas", "oil")
-#View(max_co2)
-```
